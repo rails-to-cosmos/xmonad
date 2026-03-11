@@ -52,6 +52,7 @@ myStartupHook = do
     spawnOnce "setxkbmap -layout us,ru -option '' -option ctrl:nocaps -option grp:shifts_toggle"
     spawnOnce "~/.config/xmonad/setup-inputs.sh"
     spawnOnce "stalonetray --geometry 5x1+0+0 --icon-size 20 --slot-size 24 --bg '#1a1b26' --icon-gravity NE --kludges force_icons_size -d none --window-strut top"
+    spawnOnce "redshift -l 52.37:4.90"
 
 myScratchpads :: [NamedScratchpad]
 myScratchpads =
