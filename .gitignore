@@ -22,3 +22,4 @@ cabal.project.local~
 .HTF/
 .ghc.environment.*
 /llm-history.org
+/xmonad-x86_64-linux
