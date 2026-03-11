@@ -1,8 +1,4 @@
 cradle:
-  direct:
-    arguments:
-      - -i
-      - -ilib
-      - -dynamic
-      - -package-db
-      - /usr/lib/ghc-9.6.6/lib/package.conf.d
+  cabal:
+    - path: "xmonad.hs"
+      component: "exe:xmonad-config"
