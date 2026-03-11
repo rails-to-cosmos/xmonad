@@ -8,10 +8,19 @@ import XMonad.Layout.Spacing
 import XMonad.Layout.ToggleLayouts (ToggleLayout (..), toggleLayouts)
 import XMonad.Util.EZConfig (additionalKeysP)
 import qualified XMonad.StackSet as W
+import XMonad.Actions.WindowBringer (gotoMenuConfig, WindowBringerConfig(..))
+import XMonad.Util.NamedWindows (getName)
 import XMonad.Util.Run (spawnPipe)
 import XMonad.Util.SpawnOnce
 
 import System.IO (hPutStrLn)
+
+myWindowTitler :: WindowSpace -> Window -> X String
+myWindowTitler ws w = do
+    name <- show <$> getName w
+    cls <- className `runQuery` w
+    let tag = W.tag ws
+    return $ tag ++ ": " ++ cls ++ " - " ++ name
 
 myTerminal :: String
 myTerminal = "alacritty"
@@ -55,9 +64,9 @@ myKeys =
     , ("M-<Return>", spawn myTerminal)
     , ("M-b", sendMessage ToggleStruts)
     , ("M-f", sendMessage (Toggle "Full"))
-    , ("M-t", sendMessage NextLayout)
+    , ("M-S-t", sendMessage NextLayout)
     , ("M-S-<Space>", spawn "setxkbmap -query | grep -q 'layout:.*us,' && setxkbmap ru || setxkbmap us")
-    , ("M1-<Tab>", windows W.focusDown)
+    , ("M1-<Tab>", gotoMenuConfig def { menuCommand = "dmenu", menuArgs = ["-nb", "#1a1b26", "-nf", "#c0caf5", "-sb", "#6790eb", "-sf", "#1a1b26", "-fn", "JetBrains Mono:size=10", "-h", "30", "-i", "-l", "10"], windowTitler = myWindowTitler })
     ]
 
 main :: IO ()

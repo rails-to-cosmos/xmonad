@@ -6,9 +6,12 @@ Minimal XMonad setup with xmobar, targeting Arch Linux on a Framework Laptop 16.
 
 ```bash
 ./install.sh
+./install-dmenu.sh
 ```
 
-This installs all required packages and configures keyd for CapsLock-to-Ctrl remapping.
+`install.sh` installs all required packages and configures keyd for CapsLock-to-Ctrl remapping.
+
+`install-dmenu.sh` clones dmenu from suckless, applies the line-height patch (for `-h` flag support), and installs it. This allows dmenu height to match xmobar.
 
 ## Structure
 
@@ -17,6 +20,9 @@ This installs all required packages and configures keyd for CapsLock-to-Ctrl rem
 ├── xmonad.hs          # XMonad window manager config
 ├── build              # GHC build script
 ├── install.sh         # System package installer
+├── install-dmenu.sh   # Builds dmenu with line-height patch
+├── dmenu/             # dmenu patches
+│   └── dmenu-lineheight-5.2.diff
 └── README.md
 
 ~/.config/xmobar/
@@ -32,19 +38,23 @@ Mod key is **Ctrl+Alt**.
 | Mod+Space | Launch dmenu |
 | Mod+Enter | Launch alacritty |
 | Mod+b | Toggle xmobar |
+| Mod+t | Sink floating window into tiled layout |
+| Mod+Shift+t | Next layout |
+| Mod+f | Toggle fullscreen |
 | Mod+j/k | Focus next/prev window |
 | Mod+Shift+j/k | Swap next/prev window |
 | Mod+h/l | Shrink/expand master |
 | Mod+Shift+c | Close focused window |
-| Mod+Space | Next layout |
 | Mod+1-9 | Switch to workspace |
 | Mod+Shift+1-9 | Move window to workspace |
+| Mod+Shift+Space | Toggle keyboard layout (US/RU) |
+| Alt+Tab | Focus next window |
 | Mod+q | Restart XMonad |
 | Mod+Shift+q | Quit XMonad |
 
 ## Keyboard Layout
 
-US/RU layout switching via **both Shifts pressed simultaneously**.
+US/RU layout switching via **Mod+Shift+Space**.
 
 CapsLock is remapped to Ctrl via keyd (required for Framework 16 — the QMK firmware sends instant key taps that break xkb-level remapping).
 
