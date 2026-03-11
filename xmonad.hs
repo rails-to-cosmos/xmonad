@@ -7,6 +7,7 @@ import XMonad.Layout.NoBorders (noBorders, smartBorders)
 import XMonad.Layout.Spacing
 import XMonad.Layout.ToggleLayouts (ToggleLayout (..), toggleLayouts)
 import XMonad.Util.EZConfig (additionalKeysP)
+import qualified XMonad.StackSet as W
 import XMonad.Util.Run (spawnPipe)
 import XMonad.Util.SpawnOnce
 
@@ -56,6 +57,7 @@ myKeys =
     , ("M-f", sendMessage (Toggle "Full"))
     , ("M-t", sendMessage NextLayout)
     , ("M-S-<Space>", spawn "setxkbmap -query | grep -q 'layout:.*us,' && setxkbmap ru || setxkbmap us")
+    , ("M1-<Tab>", windows W.focusDown)
     ]
 
 main :: IO ()
