@@ -10,6 +10,7 @@ import XMonad.Util.EZConfig (additionalKeysP)
 import qualified XMonad.StackSet as W
 import XMonad.Actions.WindowBringer (gotoMenuConfig, WindowBringerConfig(..))
 import XMonad.Util.NamedWindows (getName)
+import XMonad.Util.NamedScratchpad
 import XMonad.Util.Run (spawnPipe)
 import XMonad.Util.SpawnOnce
 
@@ -52,11 +53,26 @@ myStartupHook = do
     spawnOnce "~/.config/xmonad/setup-inputs.sh"
     spawnOnce "stalonetray --geometry 5x1+0+0 --icon-size 20 --slot-size 24 --bg '#1a1b26' --icon-gravity NE --kludges force_icons_size -d none --window-strut top"
 
+myScratchpads :: [NamedScratchpad]
+myScratchpads =
+    [ NS "terminal" "alacritty --class scratchterm" (className =? "scratchterm")
+        (customFloating $ W.RationalRect 0.1 0.05 0.8 0.4)
+    , NS "btop" "alacritty --class scratchbtop -e btop" (className =? "scratchbtop")
+        (customFloating $ W.RationalRect 0.1 0.1 0.8 0.8)
+    , NS "pavucontrol" "pavucontrol" (className =? "pavucontrol")
+        (customFloating $ W.RationalRect 0.2 0.2 0.6 0.6)
+    , NS "telegram" "telegram" (className =? "TelegramDesktop")
+        (customFloating $ W.RationalRect 0.15 0.1 0.7 0.8)
+    , NS "slack" "slack" (className =? "Slack")
+        (customFloating $ W.RationalRect 0.1 0.1 0.8 0.8)
+    ]
+
 myManageHook =
     composeAll
         [ className =? "Gimp" --> doFloat
         , className =? "MPlayer" --> doFloat
         ]
+        <+> namedScratchpadManageHook myScratchpads
 
 myKeys :: [(String, X ())]
 myKeys =
@@ -67,6 +83,11 @@ myKeys =
     , ("M-t", sendMessage NextLayout)
     , ("M-S-<Space>", spawn "setxkbmap -query | grep -q 'layout:.*us,' && setxkbmap ru || setxkbmap us")
     , ("M1-<Tab>", gotoMenuConfig def { menuCommand = "dmenu", menuArgs = ["-nb", "#1a1b26", "-nf", "#c0caf5", "-sb", "#6790eb", "-sf", "#1a1b26", "-fn", "JetBrains Mono:size=10", "-h", "30", "-i", "-l", "10"], windowTitler = myWindowTitler })
+    , ("M-`", namedScratchpadAction myScratchpads "terminal")
+    , ("M-s", namedScratchpadAction myScratchpads "btop")
+    , ("M-v", namedScratchpadAction myScratchpads "pavucontrol")
+    , ("M-c", namedScratchpadAction myScratchpads "telegram")
+    , ("M-S-c", namedScratchpadAction myScratchpads "slack")
     ]
 
 main :: IO ()
