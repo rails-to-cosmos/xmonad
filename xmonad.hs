@@ -51,7 +51,7 @@ myManageHook =
 
 myKeys :: [(String, X ())]
 myKeys =
-    [ ("M-<Space>", spawn "dmenu_run")
+    [ ("M-<Space>", spawn "dmenu_run -nb '#1a1b26' -nf '#c0caf5' -sb '#6790eb' -sf '#1a1b26' -fn 'JetBrains Mono:size=10' -h 30")
     , ("M-<Return>", spawn myTerminal)
     , ("M-b", sendMessage ToggleStruts)
     , ("M-f", sendMessage (Toggle "Full"))
