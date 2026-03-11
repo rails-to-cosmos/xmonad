@@ -9,7 +9,7 @@ Minimal XMonad setup with xmobar, targeting Arch Linux on a Framework Laptop 16.
 ./install-dmenu.sh
 ```
 
-`install.sh` installs all required packages and configures keyd for CapsLock-to-Ctrl remapping.
+`install.sh` installs all required packages.
 
 `install-dmenu.sh` clones dmenu from suckless, applies the line-height patch (for `-h` flag support), and installs it. This allows dmenu height to match xmobar.
 
@@ -56,7 +56,7 @@ Mod key is **Ctrl+Alt**.
 
 US/RU layout switching via **Mod+Shift+Space**.
 
-CapsLock is remapped to Ctrl via keyd (required for Framework 16 — the QMK firmware sends instant key taps that break xkb-level remapping).
+CapsLock is remapped to Ctrl via xkb (`ctrl:nocaps` option in `setxkbmap`).
 
 ## xmobar Widgets
 

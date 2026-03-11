@@ -9,3 +9,4 @@
 - Add `M-f` for fullscreen toggle
 - Change `Alt+Tab` to dmenu window switcher with app class names in titles
 - Add `M-S-Space` for US/RU keyboard layout switching
+- Remove keyd dependency, use xkb `ctrl:nocaps` for CapsLock-to-Ctrl remapping

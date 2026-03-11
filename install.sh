@@ -20,27 +20,9 @@ sudo pacman -S --needed --noconfirm \
 sudo pacman -S --needed --noconfirm \
     stalonetray
 
-# Key remapping (fixes CapsLock on Framework 16 QMK firmware)
-sudo pacman -S --needed --noconfirm \
-    keyd
-
 # Audio (for volume widget)
 sudo pacman -S --needed --noconfirm \
     alsa-utils
-
-# Configure keyd: CapsLock -> Ctrl
-sudo mkdir -p /etc/keyd
-sudo tee /etc/keyd/default.conf > /dev/null << 'EOF'
-[ids]
-
-*
-
-[main]
-
-capslock = layer(control)
-EOF
-
-sudo systemctl enable --now keyd
 
 # Natural scrolling for touchpad and mouse
 sudo tee /etc/X11/xorg.conf.d/30-natural-scroll.conf > /dev/null << 'EOF'
