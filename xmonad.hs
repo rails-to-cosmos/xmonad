@@ -49,7 +49,7 @@ myLayout = toggleLayouts (noBorders Full) $ avoidStruts $ smartBorders $ mySpaci
 
 myStartupHook :: X ()
 myStartupHook = do
-    spawnOnce "setxkbmap -layout us,ru -option '' -option ctrl:nocaps"
+    spawnOnce "setxkbmap -layout us,ru -option '' -option ctrl:nocaps -option grp:shifts_toggle"
     spawnOnce "~/.config/xmonad/setup-inputs.sh"
     spawnOnce "stalonetray --geometry 5x1+0+0 --icon-size 20 --slot-size 24 --bg '#1a1b26' --icon-gravity NE --kludges force_icons_size -d none --window-strut top"
 
@@ -83,7 +83,7 @@ myKeys =
     , ("M-t", sendMessage NextLayout)
     , ("M-S-<Space>", spawn "setxkbmap -query | grep -q 'layout:.*us,' && setxkbmap ru || setxkbmap us")
     , ("M1-<Tab>", gotoMenuConfig def { menuCommand = "dmenu", menuArgs = ["-nb", "#1a1b26", "-nf", "#c0caf5", "-sb", "#6790eb", "-sf", "#1a1b26", "-fn", "JetBrains Mono:size=10", "-h", "30", "-i", "-l", "10"], windowTitler = myWindowTitler })
-    , ("M-`", namedScratchpadAction myScratchpads "terminal")
+    , ("M-S-t", namedScratchpadAction myScratchpads "terminal")
     , ("M-s", namedScratchpadAction myScratchpads "btop")
     , ("M-v", namedScratchpadAction myScratchpads "pavucontrol")
     , ("M-c", namedScratchpadAction myScratchpads "telegram")
