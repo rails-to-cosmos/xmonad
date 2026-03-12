@@ -43,7 +43,7 @@ myStartupHook = do
     spawn "setxkbmap -layout us,ru -option '' -option ctrl:nocaps -option grp:shifts_toggle"
     spawn "~/.config/xmonad/setup-inputs.sh"
     spawn "killall stalonetray 2>/dev/null; stalonetray --geometry 5x1+0+0 --icon-size 20 --slot-size 24 --bg '#1a1b26' --icon-gravity NE --kludges force_icons_size -d none --window-strut top"
-    spawn "redshift -x 2>/dev/null; pkill -x redshift; sleep 1; redshift -l 52.37:4.90"
+    spawn "killall redshift  2>/dev/null; sleep 1; redshift -x 2>/dev/null; sleep 10; redshift -l 52.37:4.90"
     spawn "emacsclient -e '(kill-emacs)' 2>/dev/null; echo 'starting' > /tmp/emacs-status; emacs --daemon && echo 'ready' > /tmp/emacs-status || echo 'error' > /tmp/emacs-status"
 
 myScratchpads :: [NamedScratchpad]
@@ -76,7 +76,8 @@ myKeys =
     , ("M-f", sendMessage (Toggle "Full"))
     , ("M-t", sendMessage NextLayout)
     , ("M-<Space>", spawn "rofi -show combi -combi-modes 'window,drun,run' -kb-row-down 'Control+n' -kb-row-up 'Control+p'")
-    , ("M1-<Tab>", spawn "rofi -show window -kb-row-down 'Alt+Tab,Control+n' -kb-row-up 'Alt+ISO_Left_Tab,Control+p'")
+    , ("M1-<Tab>", windows W.focusDown)
+    , ("M1-S-<Tab>", windows W.focusUp)
     , ("M-S-t", namedScratchpadAction myScratchpads "terminal")
     , ("M-s", namedScratchpadAction myScratchpads "btop")
     , ("M-v", namedScratchpadAction myScratchpads "pavucontrol")
