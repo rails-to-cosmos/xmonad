@@ -8,20 +8,11 @@ import XMonad.Layout.Spacing
 import XMonad.Layout.ToggleLayouts (ToggleLayout (..), toggleLayouts)
 import XMonad.Util.EZConfig (additionalKeysP)
 import qualified XMonad.StackSet as W
-import XMonad.Actions.WindowBringer (gotoMenuConfig, WindowBringerConfig(..))
-import XMonad.Util.NamedWindows (getName)
 import XMonad.Util.NamedScratchpad
 import XMonad.Util.Run (spawnPipe)
 import XMonad.Util.SpawnOnce
 
 import System.IO (hPutStrLn)
-
-myWindowTitler :: WindowSpace -> Window -> X String
-myWindowTitler ws w = do
-    name <- show <$> getName w
-    cls <- className `runQuery` w
-    let tag = W.tag ws
-    return $ tag ++ ": " ++ cls ++ " - " ++ name
 
 myTerminal :: String
 myTerminal = "alacritty"
@@ -77,18 +68,18 @@ myManageHook =
 
 myKeys :: [(String, X ())]
 myKeys =
-    [ ("M-<Space>", spawn "dmenu_run -nb '#1a1b26' -nf '#c0caf5' -sb '#6790eb' -sf '#1a1b26' -fn 'JetBrains Mono:size=10' -h 30")
-    , ("M-<Return>", spawn myTerminal)
+    [ ("M-<Return>", spawn myTerminal)
     , ("M-b", sendMessage ToggleStruts)
     , ("M-f", sendMessage (Toggle "Full"))
     , ("M-t", sendMessage NextLayout)
-    , ("M-S-<Space>", spawn "setxkbmap -query | grep -q 'layout:.*us,' && setxkbmap ru || setxkbmap us")
-    , ("M1-<Tab>", gotoMenuConfig def { menuCommand = "dmenu", menuArgs = ["-nb", "#1a1b26", "-nf", "#c0caf5", "-sb", "#6790eb", "-sf", "#1a1b26", "-fn", "JetBrains Mono:size=10", "-h", "30", "-i", "-l", "10"], windowTitler = myWindowTitler })
+    , ("M-<Space>", spawn "rofi -show combi -combi-modes 'window,drun,run' -kb-row-down 'Control+n' -kb-row-up 'Control+p'")
+    , ("M1-<Tab>", spawn "rofi -show window -kb-row-down 'Alt+Tab,Control+n' -kb-row-up 'Alt+ISO_Left_Tab,Control+p'")
     , ("M-S-t", namedScratchpadAction myScratchpads "terminal")
     , ("M-s", namedScratchpadAction myScratchpads "btop")
     , ("M-v", namedScratchpadAction myScratchpads "pavucontrol")
     , ("M-c", namedScratchpadAction myScratchpads "telegram")
     , ("M-S-c", namedScratchpadAction myScratchpads "slack")
+    , ("M-<Escape>", spawn "echo -e 'Lock\nLogout\nSuspend\nReboot\nShutdown' | rofi -dmenu -p 'Power' -kb-row-down 'Control+n' -kb-row-up 'Control+p' | xargs -I{} sh -c 'case {} in Lock) loginctl lock-session;; Logout) xmonad --restart && killall xmonad;; Suspend) systemctl suspend;; Reboot) systemctl reboot;; Shutdown) systemctl poweroff;; esac'")
     ]
 
 main :: IO ()
