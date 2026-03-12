@@ -57,6 +57,8 @@ myScratchpads =
         (customFloating $ W.RationalRect 0.15 0.1 0.7 0.8)
     , NS "slack" "slack" (className =? "Slack")
         (customFloating $ W.RationalRect 0.1 0.1 0.8 0.8)
+    , NS "emacs-scratch" "emacsclient -c -F '((name . \"emacs-scratch\"))' -e '(switch-to-buffer \"*scratch*\")'" (title =? "emacs-scratch")
+        (customFloating $ W.RationalRect 0.15 0.1 0.7 0.8)
     ]
 
 myManageHook =
@@ -79,6 +81,7 @@ myKeys =
     , ("M-v", namedScratchpadAction myScratchpads "pavucontrol")
     , ("M-c", namedScratchpadAction myScratchpads "telegram")
     , ("M-S-c", namedScratchpadAction myScratchpads "slack")
+    , ("M-e", namedScratchpadAction myScratchpads "emacs-scratch")
     , ("M-<Escape>", spawn "echo -e 'Lock\nLogout\nSuspend\nReboot\nShutdown' | rofi -dmenu -p 'Power' -kb-row-down 'Control+n' -kb-row-up 'Control+p' | xargs -I{} sh -c 'case {} in Lock) loginctl lock-session;; Logout) xmonad --restart && killall xmonad;; Suspend) systemctl suspend;; Reboot) systemctl reboot;; Shutdown) systemctl poweroff;; esac'")
     ]
 
