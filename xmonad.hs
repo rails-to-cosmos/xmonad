@@ -44,6 +44,7 @@ myStartupHook = do
     spawnOnce "~/.config/xmonad/setup-inputs.sh"
     spawnOnce "stalonetray --geometry 5x1+0+0 --icon-size 20 --slot-size 24 --bg '#1a1b26' --icon-gravity NE --kludges force_icons_size -d none --window-strut top"
     spawnOnce "redshift -l 52.37:4.90"
+    spawn "emacsclient -e '(kill-emacs)' 2>/dev/null; emacs --daemon"
 
 myScratchpads :: [NamedScratchpad]
 myScratchpads =
@@ -57,7 +58,7 @@ myScratchpads =
         (customFloating $ W.RationalRect 0.15 0.1 0.7 0.8)
     , NS "slack" "slack" (className =? "Slack")
         (customFloating $ W.RationalRect 0.1 0.1 0.8 0.8)
-    , NS "emacs-scratch" "emacsclient -c -F '((name . \"emacs-scratch\"))' -e '(switch-to-buffer \"*scratch*\")'" (title =? "emacs-scratch")
+    , NS "emacs-scratch" "emacsclient -c -F '((name . \"emacs-scratch\"))'" (title =? "emacs-scratch")
         (customFloating $ W.RationalRect 0.15 0.1 0.7 0.8)
     ]
 
