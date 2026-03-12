@@ -42,8 +42,8 @@ myStartupHook :: X ()
 myStartupHook = do
     spawn "setxkbmap -layout us,ru -option '' -option ctrl:nocaps -option grp:shifts_toggle"
     spawn "~/.config/xmonad/setup-inputs.sh"
-    spawnOnce "stalonetray --geometry 5x1+0+0 --icon-size 20 --slot-size 24 --bg '#1a1b26' --icon-gravity NE --kludges force_icons_size -d none --window-strut top"
-    spawnOnce "redshift -l 52.37:4.90"
+    spawn "killall stalonetray 2>/dev/null; stalonetray --geometry 5x1+0+0 --icon-size 20 --slot-size 24 --bg '#1a1b26' --icon-gravity NE --kludges force_icons_size -d none --window-strut top"
+    spawn "redshift -x 2>/dev/null; pkill -x redshift; sleep 1; redshift -l 52.37:4.90"
     spawn "emacsclient -e '(kill-emacs)' 2>/dev/null; echo 'starting' > /tmp/emacs-status; emacs --daemon && echo 'ready' > /tmp/emacs-status || echo 'error' > /tmp/emacs-status"
 
 myScratchpads :: [NamedScratchpad]
