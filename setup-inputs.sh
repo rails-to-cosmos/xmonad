@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-xset r rate 170 50
+xset r rate 170 70
 
 # Enable natural scrolling on all libinput devices that support it
 for id in $(xinput list --id-only 2>/dev/null); do
