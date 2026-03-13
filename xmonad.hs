@@ -75,7 +75,8 @@ myManageHook =
 
 myKeys :: [(String, X ())]
 myKeys =
-    [ ("M-<Return>", spawn myTerminal)
+    [ ("M1-q", kill)
+    , ("M-<Return>", spawn myTerminal)
     , ("M-b", sendMessage ToggleStruts)
     , ("M-f", sendMessage (Toggle "Full"))
     , ("M-t", sendMessage NextLayout)
