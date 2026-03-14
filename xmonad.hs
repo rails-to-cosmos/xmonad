@@ -9,8 +9,7 @@ import XMonad.Layout.ToggleLayouts (ToggleLayout (..), toggleLayouts)
 import XMonad.Util.EZConfig (additionalKeysP, additionalKeys)
 import qualified XMonad.StackSet as W
 import XMonad.Util.NamedScratchpad
-import XMonad.Actions.MostRecentlyUsed (configureMRU, mostRecentlyUsed)
-import Graphics.X11.Types (xK_Alt_L, xK_Alt_R, xK_Tab)
+import Graphics.X11.Types (xK_Tab)
 import XMonad.Util.Run (spawnPipe)
 import XMonad.Util.SpawnOnce
 
@@ -50,6 +49,7 @@ myStartupHook :: X ()
 myStartupHook = do
     spawn "setxkbmap -layout us,ru -option '' -option ctrl:nocaps -option grp:shifts_toggle"
     spawn "~/.config/xmonad/setup-inputs.sh"
+    spawnOnce "dunst"
     spawnOnce "stalonetray --geometry 5x1+0+0 --icon-size 20 --slot-size 24 --bg '#1a1b26' --icon-gravity NE --kludges force_icons_size -d none --window-strut top"
     spawnOnce "redshift -l 52.37:4.90"
     spawn "emacsclient -e '(kill-emacs)' 2>/dev/null; echo 'starting' > /tmp/emacs-status; emacs --daemon && echo 'ready' > /tmp/emacs-status || echo 'error' > /tmp/emacs-status"
@@ -95,7 +95,6 @@ main :: IO ()
 main = do
     xmproc <- spawnPipe "xmobar ~/.config/xmobar/xmobarrc"
     xmonad $
-        configureMRU $
         ewmhFullscreen $
             ewmh $
                 docks
@@ -121,4 +120,6 @@ main = do
                                     }
                         }
                     `additionalKeysP` myKeys
-                    `additionalKeys` [((mod1Mask, xK_Tab), mostRecentlyUsed [xK_Alt_L, xK_Alt_R] xK_Tab)]
+                    `additionalKeys` [ ((mod1Mask, xK_Tab), windows W.focusDown)
+                                      , ((mod1Mask .|. shiftMask, xK_Tab), windows W.focusUp)
+                                      ]
