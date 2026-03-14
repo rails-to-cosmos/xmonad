@@ -9,6 +9,7 @@ import XMonad.Layout.ToggleLayouts (ToggleLayout (..), toggleLayouts)
 import XMonad.Util.EZConfig (additionalKeysP, additionalKeys)
 import qualified XMonad.StackSet as W
 import XMonad.Util.NamedScratchpad
+import XMonad.Actions.GroupNavigation (nextMatch, historyHook, Direction(..))
 import Graphics.X11.Types (xK_Tab)
 import XMonad.Util.Run (spawnPipe)
 import XMonad.Util.SpawnOnce
@@ -44,6 +45,11 @@ mySpacing = spacingRaw False (Border 4 4 4 4) True (Border 4 4 4 4) True
 myLayout = toggleLayouts (noBorders Full) $ avoidStruts $ smartBorders $ mySpacing $ tiled ||| Mirror tiled ||| Full
   where
     tiled = Tall 1 (3 / 100) (1 / 2)
+
+isOnCurrentWS :: Query Bool
+isOnCurrentWS = do
+    w <- ask
+    liftX $ elem w <$> gets (W.index . windowset)
 
 myStartupHook :: X ()
 myStartupHook = do
@@ -109,6 +115,7 @@ main = do
                         , manageHook = myManageHook <+> manageHook def
                         , startupHook = myStartupHook
                         , logHook =
+                            historyHook <+>
                             dynamicLogWithPP
                                 xmobarPP
                                     { ppOutput = hPutStrLn xmproc
@@ -120,6 +127,5 @@ main = do
                                     }
                         }
                     `additionalKeysP` myKeys
-                    `additionalKeys` [ ((mod1Mask, xK_Tab), windows W.focusDown)
-                                      , ((mod1Mask .|. shiftMask, xK_Tab), windows W.focusUp)
+                    `additionalKeys` [ ((mod1Mask, xK_Tab), nextMatch History isOnCurrentWS)
                                       ]
