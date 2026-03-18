@@ -1,17 +1,16 @@
 # XMonad Desktop Configuration
 
-Minimal XMonad setup with xmobar, targeting Arch Linux on a Framework Laptop 16.
+Minimal XMonad setup with xmobar on a Framework Laptop 16.
 
 ## Installation
 
 ```bash
-./install.sh
-./install-dmenu.sh
+make install
 ```
 
-`install.sh` installs all required packages.
+This detects the current OS and runs the appropriate install script (`arch-install.sh` or `mint-install.sh`), then builds patched dmenu.
 
-`install-dmenu.sh` clones dmenu from suckless, applies the line-height patch (for `-h` flag support), and installs it. This allows dmenu height to match xmobar.
+`scripts/install-dmenu.sh` clones dmenu from suckless, applies the line-height patch (for `-h` flag support), and installs it. This allows dmenu height to match xmobar.
 
 ## Structure
 
@@ -19,8 +18,16 @@ Minimal XMonad setup with xmobar, targeting Arch Linux on a Framework Laptop 16.
 ~/.config/xmonad/
 ├── xmonad.hs          # XMonad window manager config
 ├── build              # GHC build script
-├── install.sh         # System package installer
-├── install-dmenu.sh   # Builds dmenu with line-height patch
+├── scripts/
+│   ├── install.sh         # OS-detecting install dispatcher
+│   ├── arch-install.sh    # Arch Linux package installer
+│   ├── mint-install.sh    # Linux Mint/Ubuntu package installer
+│   ├── install-dmenu.sh   # Builds dmenu with line-height patch
+│   ├── setup-inputs.sh    # Keyboard repeat rate & natural scrolling
+│   ├── setup-keyd.sh      # CapsLock→Ctrl via keyd
+│   ├── gpu-status.sh      # GPU status for xmobar
+│   ├── redshift-status.sh # Redshift status for xmobar
+│   └── wifi-status.sh     # WiFi status for xmobar
 ├── dmenu/             # dmenu patches
 │   └── dmenu-lineheight-5.2.diff
 └── README.md
