@@ -40,7 +40,7 @@ myWorkspaces = ["1", "2", "3", "4", "5", "6", "7", "8", "9"]
 
 mySpacing = spacingRaw False (Border 4 4 4 4) True (Border 4 4 4 4) True
 
-myLayout = toggleLayouts (noBorders Full) $ avoidStruts $ smartBorders $ mySpacing $ tiled ||| Mirror tiled ||| Full
+myLayout = avoidStruts $ toggleLayouts (noBorders Full) $ smartBorders $ mySpacing $ tiled ||| Mirror tiled ||| Full
   where
     tiled = Tall 1 (3 / 100) (1 / 2)
 
