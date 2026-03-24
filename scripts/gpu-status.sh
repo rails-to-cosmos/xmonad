@@ -15,6 +15,8 @@ if [ ! -f "$cache" ]; then
     done
 fi
 
+[ ! -f "$cache" ] && exit 0
+
 parts=""
 while read -r name label; do
     sys="/sys/class/drm/$name/device"
@@ -27,4 +29,4 @@ while read -r name label; do
     fi
 done < "$cache"
 
-echo "$parts"
+[ -n "$parts" ] && printf '<fn=1>\xf3\xb0\xba\xa8</fn> %s | ' "$parts"
