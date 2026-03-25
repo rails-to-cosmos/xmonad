@@ -76,7 +76,7 @@ myManageHook =
 
 myKeys :: [(String, X ())]
 myKeys =
-    [ ("M1-q", kill)
+    [ ("C-q", kill)
     , ("M-<Return>", spawn "emacsclient -c")
     , ("M-b", sendMessage ToggleStruts)
     , ("M-f", sendMessage (Toggle "Full"))
