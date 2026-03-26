@@ -24,3 +24,4 @@ cabal.project.local~
 /llm-history.org
 /xmonad-x86_64-linux
 /.project/
+/scripts/xmobar-status
