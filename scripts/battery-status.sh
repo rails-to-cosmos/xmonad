@@ -1,4 +1,6 @@
 #!/bin/sh
+. /tmp/xmobar-theme 2>/dev/null || { ERR="#E74C3C"; WARN="#FFCC00"; GOOD="#B6E63E"; }
+
 bat=$(ls -d /sys/class/power_supply/BAT* 2>/dev/null | head -1)
 [ -z "$bat" ] && exit 0
 
@@ -13,11 +15,11 @@ case "$status" in
 esac
 
 if [ "$cap" -le 20 ]; then
-    color="#E74C3C"
+    color="$ERR"
 elif [ "$cap" -le 80 ]; then
-    color="#FFCC00"
+    color="$WARN"
 else
-    color="#B6E63E"
+    color="$GOOD"
 fi
 
 echo "<fn=1><fc=$color>$icon</fc></fn> ${cap}%"

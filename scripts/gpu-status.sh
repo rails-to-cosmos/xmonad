@@ -1,4 +1,5 @@
 #!/bin/sh
+. /tmp/xmobar-theme 2>/dev/null || { DIM="#525254"; }
 cache=/tmp/gpu-cards
 if [ ! -f "$cache" ]; then
     for card in /sys/class/drm/card[0-9]*; do
@@ -25,7 +26,7 @@ while read -r name label; do
         pct=$(cat "$sys/gpu_busy_percent" 2>/dev/null || echo "?")
         parts="$parts${parts:+  }$label ${pct}%"
     else
-        parts="$parts${parts:+  }$label <fc=#525254>off</fc>"
+        parts="$parts${parts:+  }$label <fc=$DIM>off</fc>"
     fi
 done < "$cache"
 
