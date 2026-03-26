@@ -94,6 +94,7 @@ myKeys =
     , ("C-M-<Right>", nextWS)
     , ("C-M-S-<Left>", shiftToPrev >> prevWS)
     , ("C-M-S-<Right>", shiftToNext >> nextWS)
+    , ("C-M-q", spawn "xmonad --recompile && xmonad --restart")
     , ("M-<Escape>", spawn $ "echo -e 'Lock\nLogout\nSuspend\nReboot\nShutdown' | rofi -dmenu -p 'Power' " ++ rofiFlags ++ " | xargs -I{} sh -c 'case {} in Lock) loginctl lock-session;; Logout) xmonad --restart && killall xmonad;; Suspend) systemctl suspend;; Reboot) systemctl reboot;; Shutdown) systemctl poweroff;; esac'")
     ]
 
