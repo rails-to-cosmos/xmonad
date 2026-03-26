@@ -1,13 +1,12 @@
 #!/bin/sh
-# Query Emacs for the active danneskjold theme variant, write a color palette
-# for status scripts, and restart xmobar if the theme changed.
+# Write xmobar color palette for the specified theme and restart xmobar if it changed.
+# Usage: theme-sync.sh [light|dark]
 
 palette=/tmp/xmobar-theme
 prev=/tmp/xmobar-theme-variant
 xmobarrc=~/.config/xmobar/xmobarrc
 
-variant=$(emacsclient -e '(if (custom-theme-enabled-p (quote danneskjold-light)) "light" "dark")' 2>/dev/null | tr -d '"')
-[ -z "$variant" ] && variant="dark"
+variant="${1:-dark}"
 
 # Check if theme actually changed
 [ -f "$prev" ] && old=$(cat "$prev") || old=""
