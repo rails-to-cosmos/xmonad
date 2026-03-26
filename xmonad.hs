@@ -3,6 +3,7 @@ import XMonad
 import XMonad.Hooks.DynamicLog
 import XMonad.Hooks.EwmhDesktops
 import XMonad.Hooks.ManageDocks
+import XMonad.Actions.CycleWS (prevWS, nextWS, shiftToPrev, shiftToNext)
 import XMonad.Layout.NoBorders (noBorders, smartBorders)
 import XMonad.Layout.Spacing
 import XMonad.Layout.ToggleLayouts (ToggleLayout (..), toggleLayouts)
@@ -90,6 +91,10 @@ myKeys =
     , ("M-c", spawn "telegram")
     , ("M-S-c", spawn "slack")
     , ("M-e", namedScratchpadAction myScratchpads "emacs-scratch")
+    , ("C-M-<Left>", prevWS)
+    , ("C-M-<Right>", nextWS)
+    , ("C-M-S-<Left>", shiftToPrev >> prevWS)
+    , ("C-M-S-<Right>", shiftToNext >> nextWS)
     , ("M-<Escape>", spawn $ "echo -e 'Lock\nLogout\nSuspend\nReboot\nShutdown' | rofi -dmenu -p 'Power' " ++ rofiFlags ++ " | xargs -I{} sh -c 'case {} in Lock) loginctl lock-session;; Logout) xmonad --restart && killall xmonad;; Suspend) systemctl suspend;; Reboot) systemctl reboot;; Shutdown) systemctl poweroff;; esac'")
     ]
 

@@ -3,7 +3,8 @@
 iface="wlan0"
 state="/tmp/wifi-status-$iface"
 essid=$(iw dev "$iface" link 2>/dev/null | awk '/SSID:/{print $2}')
-[ -z "$essid" ] && echo "<fc=$DIM>disconnected</fc>" && exit 0
+icon=$(printf '\xef\x87\xab')
+[ -z "$essid" ] && printf '<fn=1><fc=%s>%s</fc></fn> <fc=%s>disconnected</fc>' "$DIM" "$icon" "$DIM" && exit 0
 
 rx=$(cat /sys/class/net/$iface/statistics/rx_bytes 2>/dev/null || echo 0)
 tx=$(cat /sys/class/net/$iface/statistics/tx_bytes 2>/dev/null || echo 0)
@@ -28,4 +29,4 @@ else
 fi
 
 echo "$rx $tx" > "$state"
-echo "<fc=$color>$essid</fc>"
+printf '<fn=1><fc=%s>%s</fc></fn> <fc=%s>%s</fc>' "$color" "$icon" "$color" "$essid"
