@@ -55,7 +55,6 @@ myStartupHook = do
     spawnOnce "stalonetray --geometry 5x1+0+0 --icon-size 20 --slot-size 24 --bg '#000000' --icon-gravity NE --kludges force_icons_size -d none --window-strut top"
     spawnOnce "redshift -l 52.37:4.90"
     spawn "emacsclient -e '(kill-emacs)' 2>/dev/null; echo 'starting' > /tmp/emacs-status; emacs --daemon && echo 'ready' > /tmp/emacs-status || echo 'error' > /tmp/emacs-status"
-    spawn "~/.config/xmonad/scripts/theme-sync.sh"
 
 myScratchpads :: [NamedScratchpad]
 myScratchpads =

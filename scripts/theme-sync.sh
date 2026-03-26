@@ -53,6 +53,5 @@ if [ "$old" != "$variant" ] && [ -n "$old" ]; then
         -e "s/fgColor = \"#[0-9A-Fa-f]*\"/fgColor = \"$FG\"/" \
         -e "s/borderColor = \"#[0-9A-Fa-f]*\"/borderColor = \"$BORDER\"/" \
         "$xmobarrc"
-    killall xmobar
-    xmobar "$xmobarrc" &
+    xmonad --restart
 fi

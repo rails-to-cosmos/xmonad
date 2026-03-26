@@ -7,10 +7,11 @@ module Main where
 
 import Control.Exception (try, SomeException)
 import Data.Char (isSpace)
-import Data.List (find, isPrefixOf)
+import Data.List (find, intercalate, isPrefixOf, isInfixOf)
 import System.Directory (listDirectory, doesFileExist, doesDirectoryExist)
 import System.Environment (getArgs)
 import System.FilePath ((</>))
+import System.IO (openFile, IOMode(..), hGetContents', hClose)
 import System.Process (readProcess)
 
 -- Theme colors with defaults
@@ -74,8 +75,14 @@ loadTheme = do
 
 readFileSafe :: FilePath -> IO String
 readFileSafe path = do
-  result <- try (readFile path) :: IO (Either SomeException String)
+  result <- try go :: IO (Either SomeException String)
   return $ either (const "") id result
+  where
+    go = do
+      h <- openFile path ReadMode
+      s <- hGetContents' h
+      hClose h
+      return s
 
 trim :: String -> String
 trim = f . f where f = reverse . dropWhile isSpace
@@ -194,6 +201,132 @@ volume t = do
         then putStr $ fc (tErr t) "[M]"
         else putStr vol
 
+wifi :: Theme -> IO ()
+wifi t = do
+  let iface = "wlan0"
+      stateFile = "/tmp/wifi-status-" ++ iface
+  result <- try (readProcess "iw" ["dev", iface, "link"] "")
+            :: IO (Either SomeException String)
+  let essid = case result of
+        Left _    -> ""
+        Right out -> case find ("SSID:" `isPrefixOf`) (map trim (lines out)) of
+          Just l  -> trim $ drop 5 l
+          Nothing -> ""
+  if null essid
+    then putStr $ icon (tDim t) "\xF1EB" ++ " " ++ fc (tDim t) "disconnected"
+    else do
+      rx <- readInt <$> readFileSafe ("/sys/class/net/" ++ iface ++ "/statistics/rx_bytes")
+      tx <- readInt <$> readFileSafe ("/sys/class/net/" ++ iface ++ "/statistics/tx_bytes")
+      prev <- readFileSafe stateFile
+      let color = case words prev of
+            [prS, ptS] ->
+              let pr = readInt prS
+                  pt = readInt ptS
+                  dt = 3
+                  rxR = (rx - pr) `div` dt
+                  txR = (tx - pt) `div` dt
+              in if rxR > 1000000 || txR > 1000000 then tGood t
+                 else if rxR > 100000 || txR > 100000 then tAccent t
+                 else if rxR > 1000 || txR > 1000 then tNormal t
+                 else tDim t
+            _ -> tNormal t
+      writeFile stateFile (show rx ++ " " ++ show tx)
+      putStr $ icon color "\xF1EB" ++ " " ++ fc color essid
+
+vpn :: Theme -> IO ()
+vpn t = do
+  result <- try (readProcess "ip" ["-o", "link", "show", "type", "wireguard"] "")
+            :: IO (Either SomeException String)
+  let iface = case result of
+        Left _    -> ""
+        Right out -> case lines out of
+          (l:_) -> trim $ takeWhile (\c -> c /= '@' && c /= ':') $ drop 1 $ dropWhile (/= ':') l
+          _     -> ""
+  if null iface
+    then putStr $ icon (tDim t) "\xF0582" ++ " " ++ fc (tDim t) "off"
+    else putStr $ icon (tGood t) "\xF0582" ++ " " ++ fc (tGood t) iface
+
+emacs :: Theme -> IO ()
+emacs t = do
+  status <- trim <$> readFileSafe "/tmp/emacs-status"
+  let color = case status of
+        "ready"    -> tGood t
+        "starting" -> tWarn t
+        "error"    -> tErr t
+        _          -> tDim t
+  putStr $ icon color "\xE632"
+
+gpu :: Theme -> IO ()
+gpu t = do
+  let cacheFile = "/tmp/gpu-cards"
+  exists <- doesFileExist cacheFile
+  if not exists
+    then do
+      exists' <- doesDirectoryExist "/sys/class/drm"
+      if not exists'
+        then return ()
+        else do
+          entries <- listDirectory "/sys/class/drm"
+          let cards = filter (\e -> "card" `isPrefixOf` e && all (`elem` "0123456789") (drop 4 e)) entries
+          foundAny <- buildGpuCache cacheFile cards
+          if not foundAny then return ()
+          else gpuOutput t cacheFile
+    else gpuOutput t cacheFile
+
+buildGpuCache :: FilePath -> [String] -> IO Bool
+buildGpuCache cacheFile cards = go cards False
+  where
+    go [] found = return found
+    go (card:rest) found = do
+      let gpuFile = "/sys/class/drm" </> card </> "device" </> "gpu_busy_percent"
+      hasGpu <- doesFileExist gpuFile
+      if not hasGpu then go rest found
+      else do
+        let deviceLink = "/sys/class/drm" </> card </> "device"
+        result <- try (readProcess "lspci" ["-s", "00:00.0"] "") :: IO (Either SomeException String)
+        -- Get PCI address from symlink
+        pciResult <- try (readProcess "readlink" [deviceLink] "") :: IO (Either SomeException String)
+        let pci = case pciResult of
+              Right p -> let s = trim p in reverse $ takeWhile (/= '/') (reverse s)
+              Left _  -> ""
+        desc <- if null pci then return ""
+                else do
+                  r <- try (readProcess "lspci" ["-s", pci] "") :: IO (Either SomeException String)
+                  return $ either (const "") trim r
+        let label = extractGpuLabel desc card
+        appendFile cacheFile (card ++ " " ++ label ++ "\n")
+        go rest True
+
+extractGpuLabel :: String -> String -> String
+extractGpuLabel desc fallback =
+  let afterBracket = drop 1 $ dropWhile (/= ']') desc
+      trimmed = dropWhile (== ' ') afterBracket
+      beforeBracket = takeWhile (/= '[') trimmed
+      cleaned = reverse $ dropWhile isSpace $ reverse beforeBracket
+  in if null cleaned then fallback else cleaned
+
+gpuOutput :: Theme -> FilePath -> IO ()
+gpuOutput t cacheFile = do
+  contents <- readFileSafe cacheFile
+  parts <- mapM (formatGpuCard t) (filter (not . null) (lines contents))
+  let nonEmpty = filter (not . null) parts
+  if null nonEmpty then return ()
+  else putStr $ icon (tNormal t) "\xF0EA8" ++ " " ++ intercalate "  " nonEmpty ++ " | "
+
+formatGpuCard :: Theme -> String -> IO String
+formatGpuCard t line = case words line of
+  (name:rest) -> do
+    let label = unwords rest
+        sys = "/sys/class/drm" </> name </> "device"
+    state <- trim <$> readFileSafe (sys </> "power" </> "runtime_status")
+    if state == "active"
+      then do
+        pct <- trim <$> readFileSafe (sys </> "gpu_busy_percent")
+        let p = if null pct then "?" else pct
+        return $ label ++ " " ++ p ++ "%"
+      else return $ label ++ " " ++ fc (tDim t) "off"
+  _ -> return ""
+
 main :: IO ()
 main = do
   args <- getArgs
@@ -203,4 +336,8 @@ main = do
     ["brightness"] -> brightness t
     ["cputemp"]    -> cputemp t
     ["volume"]     -> volume t
-    _              -> putStrLn "Usage: xmobar-status {battery|brightness|cputemp|volume}"
+    ["wifi"]       -> wifi t
+    ["vpn"]        -> vpn t
+    ["emacs"]      -> emacs t
+    ["gpu"]        -> gpu t
+    _              -> putStrLn "Usage: xmobar-status {battery|brightness|cputemp|volume|wifi|vpn|emacs|gpu}"
