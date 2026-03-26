@@ -25,7 +25,7 @@ while read -r name label; do
         pct=$(cat "$sys/gpu_busy_percent" 2>/dev/null || echo "?")
         parts="$parts${parts:+  }$label ${pct}%"
     else
-        parts="$parts${parts:+  }$label <fc=#565f89>off</fc>"
+        parts="$parts${parts:+  }$label <fc=#525254>off</fc>"
     fi
 done < "$cache"
 

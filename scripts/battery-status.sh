@@ -13,11 +13,11 @@ case "$status" in
 esac
 
 if [ "$cap" -le 20 ]; then
-    color="#f7768e"
+    color="#E74C3C"
 elif [ "$cap" -le 80 ]; then
-    color="#e0af68"
+    color="#FFCC00"
 else
-    color="#9ece6a"
+    color="#B6E63E"
 fi
 
 echo "<fn=1><fc=$color>$icon</fc></fn> ${cap}%"

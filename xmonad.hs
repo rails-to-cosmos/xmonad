@@ -27,10 +27,10 @@ myBorderWidth :: Dimension
 myBorderWidth = 2
 
 myNormalBorderColor :: String
-myNormalBorderColor = "#444444"
+myNormalBorderColor = "#223959"
 
 myAccentColor :: String
-myAccentColor = "#6790eb"
+myAccentColor = "#4CB5F5"
 
 myFocusedBorderColor :: String
 myFocusedBorderColor = myAccentColor
@@ -51,7 +51,7 @@ myStartupHook = do
     spawn "setxkbmap -layout us,ru -option '' -option ctrl:nocaps -option grp:shifts_toggle"
     spawn "~/.config/xmonad/scripts/setup-inputs.sh"
     spawnOnce "dunst"
-    spawnOnce "stalonetray --geometry 5x1+0+0 --icon-size 20 --slot-size 24 --bg '#1a1b26' --icon-gravity NE --kludges force_icons_size -d none --window-strut top"
+    spawnOnce "stalonetray --geometry 5x1+0+0 --icon-size 20 --slot-size 24 --bg '#000000' --icon-gravity NE --kludges force_icons_size -d none --window-strut top"
     spawnOnce "redshift -l 52.37:4.90"
     spawn "emacsclient -e '(kill-emacs)' 2>/dev/null; echo 'starting' > /tmp/emacs-status; emacs --daemon && echo 'ready' > /tmp/emacs-status || echo 'error' > /tmp/emacs-status"
 
@@ -116,8 +116,8 @@ main = do
                                     , ppLayout = const ""
                                     , ppTitle = xmobarColor myAccentColor "" . shorten 50
                                     , ppCurrent = xmobarColor myAccentColor "" . wrap "[" "]"
-                                    , ppHidden = xmobarColor "#888888" ""
-                                    , ppHiddenNoWindows = xmobarColor "#555555" ""
+                                    , ppHidden = xmobarColor "#C0C5CF" ""
+                                    , ppHiddenNoWindows = xmobarColor "#39393D" ""
                                     , ppSep = "  |  "
                                     }
                         }

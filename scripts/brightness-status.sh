@@ -10,13 +10,13 @@ bl=$(cat "$cache")
 b=$(( $(cat "$bl/brightness") * 100 / $(cat "$bl/max_brightness") ))
 
 if [ $b -lt 25 ]; then
-    c='#565f89'
+    c='#525254'
 elif [ $b -lt 50 ]; then
-    c='#888888'
+    c='#C0C5CF'
 elif [ $b -lt 75 ]; then
-    c='#c0caf5'
+    c='#D0E1F9'
 else
-    c='#e0af68'
+    c='#FFCC00'
 fi
 
 printf '<fn=1><fc=%s>\xef\x83\xab</fc></fn>' "$c"
