@@ -90,6 +90,7 @@ myKeys =
     , ("M-c", spawn "telegram")
     , ("M-S-c", spawn "slack")
     , ("M-e", namedScratchpadAction myScratchpads "emacs-scratch")
+    , ("M-S-v", spawn "sh -c 'if lsmod | grep -q uvcvideo; then sudo modprobe -r uvcvideo; else sudo modprobe uvcvideo; fi'")
     , ("C-M-<Left>", prevWS)
     , ("C-M-<Right>", nextWS)
     , ("C-M-S-<Left>", shiftToPrev >> prevWS)

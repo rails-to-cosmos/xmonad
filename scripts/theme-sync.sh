@@ -4,7 +4,7 @@
 
 palette=/tmp/xmobar-theme
 prev=/tmp/xmobar-theme-variant
-xmobarrc=~/.config/xmobar/xmobarrc
+theme_conf=~/.config/xmobar/theme.conf
 
 variant="${1:-dark}"
 
@@ -44,13 +44,11 @@ NORMAL="#D0E1F9"
 EOF
 fi
 
+# Write theme overrides and rebuild xmobarrc
+cp "$palette" "$theme_conf"
+
 # Restart xmobar if theme changed
 if [ "$old" != "$variant" ] && [ -n "$old" ]; then
-    . "$palette"
-    sed -i \
-        -e "s/bgColor = \"#[0-9A-Fa-f]*\"/bgColor = \"$BG\"/" \
-        -e "s/fgColor = \"#[0-9A-Fa-f]*\"/fgColor = \"$FG\"/" \
-        -e "s/borderColor = \"#[0-9A-Fa-f]*\"/borderColor = \"$BORDER\"/" \
-        "$xmobarrc"
+    ~/.config/xmobar/build.sh
     xmonad --restart
 fi

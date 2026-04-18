@@ -327,6 +327,15 @@ formatGpuCard t line = case words line of
       else return $ label ++ " " ++ fc (tDim t) "off"
   _ -> return ""
 
+camera :: Theme -> IO ()
+camera t = do
+  modules <- readFileSafe "/proc/modules"
+  let loaded = any (isPrefixOf "uvcvideo") (lines modules)
+      (color, ico) = if loaded
+                     then (tGood t, "\xF0208")  -- eye open = camera available
+                     else (tErr t, "\xF0209")   -- eye off = camera disabled
+  putStr $ icon color ico
+
 main :: IO ()
 main = do
   args <- getArgs
@@ -334,10 +343,11 @@ main = do
   case args of
     ["battery"]    -> battery t
     ["brightness"] -> brightness t
+    ["camera"]     -> camera t
     ["cputemp"]    -> cputemp t
     ["volume"]     -> volume t
     ["wifi"]       -> wifi t
     ["vpn"]        -> vpn t
     ["emacs"]      -> emacs t
     ["gpu"]        -> gpu t
-    _              -> putStrLn "Usage: xmobar-status {battery|brightness|cputemp|volume|wifi|vpn|emacs|gpu}"
+    _              -> putStrLn "Usage: xmobar-status {battery|brightness|camera|cputemp|volume|wifi|vpn|emacs|gpu}"
