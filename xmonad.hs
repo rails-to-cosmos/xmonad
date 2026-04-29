@@ -51,6 +51,7 @@ myStartupHook :: X ()
 myStartupHook = do
     spawn "setxkbmap -layout us,ru -option '' -option ctrl:nocaps -option grp:shifts_toggle"
     spawn "~/.config/xmonad/scripts/setup-inputs.sh"
+    spawn "~/.config/xmonad/scripts/audio-fix.sh"
     spawnOnce "dunst"
     spawnOnce "stalonetray --geometry 5x1+0+0 --icon-size 20 --slot-size 24 --bg '#000000' --icon-gravity NE --kludges force_icons_size -d none --window-strut top"
     spawnOnce "redshift -l 52.37:4.90"
@@ -91,6 +92,8 @@ myKeys =
     , ("M-S-c", spawn "slack")
     , ("M-e", namedScratchpadAction myScratchpads "emacs-scratch")
     , ("M-S-v", spawn "sh -c 'if lsmod | grep -q uvcvideo; then sudo modprobe -r uvcvideo; else sudo modprobe uvcvideo; fi'")
+    , ("M-S-k", prevWS)
+    , ("M-S-j", nextWS)
     , ("C-M-<Left>", prevWS)
     , ("C-M-<Right>", nextWS)
     , ("C-M-S-<Left>", shiftToPrev >> prevWS)
