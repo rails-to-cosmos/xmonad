@@ -24,6 +24,11 @@ sudo pacman -S --needed --noconfirm \
 sudo pacman -S --needed --noconfirm \
     alsa-utils
 
+# Display auto-configuration (saves/restores xrandr profiles based on connected displays)
+sudo pacman -S --needed --noconfirm \
+    autorandr
+systemctl --user enable --now autorandr.service 2>/dev/null || true
+
 # Natural scrolling for touchpad and mouse
 sudo tee /etc/X11/xorg.conf.d/30-natural-scroll.conf > /dev/null << 'EOF'
 Section "InputClass"

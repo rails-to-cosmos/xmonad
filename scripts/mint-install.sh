@@ -30,6 +30,10 @@ sudo apt-get install -y \
 sudo apt-get install -y \
     alsa-utils
 
+# Display auto-configuration (saves/restores xrandr profiles based on connected displays)
+sudo apt-get install -y \
+    autorandr
+
 # Natural scrolling for touchpad and mouse
 sudo tee /etc/X11/xorg.conf.d/30-natural-scroll.conf > /dev/null << 'EOF'
 Section "InputClass"
