@@ -49,9 +49,11 @@ myLayout = avoidStruts $ toggleLayouts (noBorders Full) $ smartBorders $ mySpaci
 
 myStartupHook :: X ()
 myStartupHook = do
-    spawn "setxkbmap -layout us,ru -option '' -option grp:shifts_toggle"
+    spawn "setxkbmap -layout us,ru -option '' -option ctrl:nocaps -option grp:shifts_toggle"
+    -- spawn "setxkbmap -layout us,ru -option '' -option grp:shifts_toggle"
     spawn "~/.config/xmonad/scripts/setup-inputs.sh"
     spawn "~/.config/xmonad/scripts/audio-fix.sh"
+    -- spawn "sudo -n ~/.config/xmonad/scripts/power-tweaks.sh"
     spawnOnce "dunst"
     spawnOnce "/usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1"
     spawnOnce "stalonetray --geometry 5x1+0+0 --icon-size 20 --slot-size 24 --bg '#000000' --icon-gravity NE --kludges force_icons_size -d none --window-strut top"
