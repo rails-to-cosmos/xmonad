@@ -49,7 +49,7 @@ myLayout = avoidStruts $ toggleLayouts (noBorders Full) $ smartBorders $ mySpaci
 
 myStartupHook :: X ()
 myStartupHook = do
-    spawn "setxkbmap -layout us,ru -option '' -option ctrl:nocaps -option grp:shifts_toggle"
+    spawn "setxkbmap -layout us,ru -option '' -option grp:shifts_toggle"
     spawn "~/.config/xmonad/scripts/setup-inputs.sh"
     spawn "~/.config/xmonad/scripts/audio-fix.sh"
     spawnOnce "dunst"
@@ -99,6 +99,8 @@ myKeys =
     , ("C-M-S-<Left>", shiftToPrev >> prevWS)
     , ("C-M-S-<Right>", shiftToNext >> nextWS)
     , ("C-M-q", spawn "xmonad --recompile && xmonad --restart")
+    , ("<XF86MonBrightnessDown>", spawn "brightnessctl -d amdgpu_bl2 set 5%-")
+    , ("<XF86MonBrightnessUp>", spawn "brightnessctl -d amdgpu_bl2 set +5%")
     , ("M-<Escape>", spawn $ "echo -e 'Lock\nLogout\nSuspend\nReboot\nShutdown' | rofi -dmenu -p 'Power' " ++ rofiFlags ++ " | xargs -I{} sh -c 'case {} in Lock) loginctl lock-session;; Logout) xmonad --restart && killall xmonad;; Suspend) systemctl suspend;; Reboot) systemctl reboot;; Shutdown) systemctl poweroff;; esac'")
     ]
 

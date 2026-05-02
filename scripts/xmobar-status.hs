@@ -172,7 +172,7 @@ brightness t = do
                 | pct < 50  = tMid t
                 | pct < 75  = tFrost t
                 | otherwise = tWarn t
-      putStr $ icon color "\xF0EB"
+      putStr $ icon color "\xF0EB" ++ " " ++ show pct ++ "%"
 
 cputemp :: Theme -> IO ()
 cputemp t = do
@@ -318,14 +318,44 @@ formatGpuCard t line = case words line of
   (name:rest) -> do
     let label = unwords rest
         sys = "/sys/class/drm" </> name </> "device"
-    state <- trim <$> readFileSafe (sys </> "power" </> "runtime_status")
-    if state == "active"
-      then do
-        pct <- trim <$> readFileSafe (sys </> "gpu_busy_percent")
-        let p = if null pct then "?" else pct
-        return $ label ++ " " ++ p ++ "%"
-      else return $ label ++ " " ++ fc (tDim t) "off"
+    exists <- doesDirectoryExist sys
+    if not exists
+      then return $ fc (tDim t) (label ++ " removed")
+      else do
+        state <- trim <$> readFileSafe (sys </> "power" </> "runtime_status")
+        if state == "active"
+          then do
+            pct <- trim <$> readFileSafe (sys </> "gpu_busy_percent")
+            let p = if null pct then "?" else pct
+            return $ label ++ " " ++ p ++ "%"
+          else return $ fc (tDim t) (label ++ " off")
   _ -> return ""
+
+power :: Theme -> IO ()
+power t = do
+  mbat <- findFirst "/sys/class/power_supply" "BAT"
+  case mbat of
+    Nothing -> return ()
+    Just bat -> do
+      vS <- trim <$> readFileSafe (bat </> "voltage_now")
+      cS <- trim <$> readFileSafe (bat </> "current_now")
+      status <- trim <$> readFileSafe (bat </> "status")
+      let v = readInt vS                    -- uV
+          c = abs (readInt cS)              -- uA (abs in case kernel reports signed)
+          w10 = if v > 0 && c > 0           -- 0.1W units
+                  then (v `div` 1000) * (c `div` 1000) `div` 100000
+                  else 0
+          wInt = w10 `div` 10
+          wDec = w10 `mod` 10
+          wStr = show wInt ++ "." ++ show wDec ++ "W"
+          color | wInt < 15  = tGood t
+                | wInt < 25  = tWarn t
+                | wInt < 40  = tErr t
+                | otherwise  = tErr t
+      case status of
+        "Discharging" -> putStr $ icon color "\xF0E7" ++ " " ++ wStr
+        "Charging"    -> putStr $ icon (tGood t) "\xF0E7" ++ " +" ++ wStr
+        _             -> return ()
 
 camera :: Theme -> IO ()
 camera t = do
@@ -350,4 +380,5 @@ main = do
     ["vpn"]        -> vpn t
     ["emacs"]      -> emacs t
     ["gpu"]        -> gpu t
-    _              -> putStrLn "Usage: xmobar-status {battery|brightness|camera|cputemp|volume|wifi|vpn|emacs|gpu}"
+    ["power"]      -> power t
+    _              -> putStrLn "Usage: xmobar-status {battery|brightness|camera|cputemp|volume|wifi|vpn|emacs|gpu|power}"

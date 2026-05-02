@@ -25,3 +25,4 @@ cabal.project.local~
 /xmonad-x86_64-linux
 /.project/
 /scripts/xmobar-status
+*.hs#
