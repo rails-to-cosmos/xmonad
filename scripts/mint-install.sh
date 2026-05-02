@@ -38,6 +38,11 @@ sudo apt-get install -y \
 sudo apt-get install -y \
     policykit-1-gnome
 
+# Power profile daemon (auto AC/battery profile switching, integrates with desktop)
+sudo apt-get install -y \
+    power-profiles-daemon
+sudo systemctl enable --now power-profiles-daemon
+
 # Display auto-configuration (saves/restores xrandr profiles based on connected displays)
 sudo apt-get install -y \
     autorandr

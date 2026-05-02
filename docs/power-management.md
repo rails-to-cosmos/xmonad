@@ -2,22 +2,28 @@
 
 **Hardware:** Framework Laptop 16 (AMD Ryzen 9 7940HS + Radeon RX 7600 dGPU)
 **OS:** CachyOS, kernel 6.19+
-**Date:** 2026-05-02
+**Last updated:** 2026-05-02
 
-## Current Baseline Issues
+## Current Status
 
-Diagnosed power draw: **~31W idle** (target: 8-15W)
-Estimated battery life: **1.4 hours** (target: 6-8h with iGPU)
+Power draw: **~17.7W idle** (down from ~31W baseline; target 8-15W)
+Estimated battery life: **~3-4 hours** (target 6-8h with iGPU)
 
-| Problem                    | Impact        | Status                                             |
-|----------------------------|---------------|----------------------------------------------------|
-| dGPU (RX 7600) active      | 8-15W         | `power_state: D0`                                  |
-| Brightness at 100%         | 3-5W          | Max                                                |
-| NVMe power saving disabled | 1-3W          | `nvme_core.default_ps_max_latency_us=0` in cmdline |
-| PCIe ASPM not active       | 2-4W          | Default policy (not `powersupersave`)              |
-| No power management daemon | 2-5W          | None installed                                     |
-| WiFi power save            | 0.5-1W        | Likely off                                         |
-| Many wake sources enabled  | Suspend drain | 10+ devices wake in S3/S4                          |
+| Item                                | Impact        | Status                                                  |
+|-------------------------------------|---------------|---------------------------------------------------------|
+| dGPU (RX 7600) sleeps when idle     | 8-15W         | ✅ controlled via `dgpu-control.sh` (M-S-g)             |
+| Brightness control                  | 3-5W          | ✅ `brightnessctl` + XF86MonBrightness keys             |
+| Refresh rate switcher (165 / 60 Hz) | 1.5-2W        | ✅ `refresh-rate.sh` (M-S-r)                            |
+| Runtime tweaks (ASPM, USB, WiFi PM) | 4-8W combined | ✅ `power-tweaks.sh` (run with sudo)                    |
+| Power widget in xmobar              | —             | ✅ `%power%` shows live W with color thresholds         |
+| polkit GUI auth agent               | —             | ✅ `polkit-gnome` autostarted from xmonad               |
+| NVMe power saving disabled          | 1-3W          | ⏳ `nvme_core.default_ps_max_latency_us=0` still in cmdline — remove via `/etc/default/grub` |
+| PCIe ASPM kernel default            | 2-4W          | ⏳ `pcie_aspm=force pcie_aspm.policy=powersupersave` not in cmdline |
+| Power management daemon             | 2-5W          | ⏳ `power-profiles-daemon` not installed                |
+| AMD iGPU power profile (battery)    | 1-2W          | ⏳ Always `auto`; no AC/battery switching               |
+| Audio codec power_save              | 0.5-1W        | ⏳ Default (off)                                        |
+| Suspend wake sources                | drain in S3   | ⏳ 10+ devices still wake in S3/S4                      |
+| Bluetooth disable on battery        | 0.5-1W        | ⏳ Always on                                            |
 
 ---
 
@@ -345,12 +351,14 @@ Or watch the live xmobar power widget (`%power%`) for real-time delta.
 
 ## Power Reduction Tracker
 
-| Phase                                | Power Draw   | Notes                                    |
-|--------------------------------------|--------------|------------------------------------------|
-| Initial baseline                     | 31W          | dGPU active, brightness 100%, no tweaks  |
-| After power-tweaks.sh + dGPU disable | 17.7W        | -43%; in yellow zone                     |
-| Target (idle, terminal)              | 8-12W        | Green zone                               |
-| Target (light browsing)              | 12-15W       | Green zone                               |
+| Phase                                  | Power Draw  | Notes                                                     |
+|----------------------------------------|-------------|-----------------------------------------------------------|
+| Initial baseline                       | 31W         | dGPU active, brightness 100%, no tweaks                   |
+| After power-tweaks.sh + dGPU disabled  | **17.7W**   | -43%; current state, yellow zone                          |
+| + 60 Hz refresh + lower brightness     | ~14-15W     | Achievable now via M-S-r and brightness keys              |
+| + NVMe + ASPM + iGPU profile + audio   | ~10-12W     | Requires kernel cmdline edit + power-profiles-daemon      |
+| Target (idle, terminal)                | 8-12W       | Green zone                                                |
+| Target (light browsing)                | 12-15W      | Green zone                                                |
 
 ---
 

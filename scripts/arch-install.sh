@@ -32,6 +32,11 @@ sudo pacman -S --needed --noconfirm \
 sudo pacman -S --needed --noconfirm \
     polkit-gnome
 
+# Power profile daemon (auto AC/battery profile switching, integrates with desktop)
+sudo pacman -S --needed --noconfirm \
+    power-profiles-daemon
+sudo systemctl enable --now power-profiles-daemon
+
 # Display auto-configuration (saves/restores xrandr profiles based on connected displays)
 sudo pacman -S --needed --noconfirm \
     autorandr

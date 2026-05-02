@@ -81,8 +81,7 @@ myKeys :: [(String, X ())]
 myKeys =
     [ ("C-q", kill)
     , ("M-<Return>", spawn "emacsclient -c")
-    , ("M-b", sendMessage ToggleStruts)
-    , ("M-f", sendMessage (Toggle "Full"))
+    , ("M-f", sendMessage ToggleStruts)
     , ("M-t", sendMessage NextLayout)
     , ("M-<Space>", spawn $ "rofi -show combi -combi-modes 'window,drun,run' " ++ rofiFlags)
     , ("M-S-<Space>", spawn $ "rofi -show combi -combi-modes 'drun,run' -run-command 'env DRI_PRIME=1 {cmd}' -drun-command 'env DRI_PRIME=1 {exec}' " ++ rofiFlags)
@@ -102,6 +101,7 @@ myKeys =
     , ("<XF86MonBrightnessUp>", spawn "brightnessctl --class=backlight set +5%")
     , ("M-S-g", spawn "~/.config/xmonad/scripts/dgpu-control.sh")
     , ("M-S-r", spawn "~/.config/xmonad/scripts/refresh-rate.sh")
+    , ("M-S-p", spawn "~/.config/xmonad/scripts/power-profile.sh")
     , ("M-<Escape>", spawn $ "echo -e 'Lock\nLogout\nSuspend\nReboot\nShutdown' | rofi -dmenu -p 'Power' " ++ rofiFlags ++ " | xargs -I{} sh -c 'case {} in Lock) loginctl lock-session;; Logout) xmonad --restart && killall xmonad;; Suspend) systemctl suspend;; Reboot) systemctl reboot;; Shutdown) systemctl poweroff;; esac'")
     ]
 
