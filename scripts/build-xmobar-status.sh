@@ -11,4 +11,5 @@ if [ -f "$BIN" ] && [ "$BIN" -nt "$SRC" ]; then
 fi
 
 mkdir -p "$OUT"
-ghc -O2 -dynamic -v0 -outputdir "$OUT" -o "$BIN" "$SRC"
+# Use system GHC: pacman-installed haskell-dbus (and friends) are registered there.
+/usr/bin/ghc -O2 -dynamic -v0 -outputdir "$OUT" -o "$BIN" "$SRC"

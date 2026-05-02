@@ -1,6 +1,6 @@
 #!/usr/bin/env cabal
 {- cabal:
-build-depends: base, directory, filepath, process, bytestring
+build-depends: base, directory, filepath, process, bytestring, dbus
 -}
 
 module Main where
@@ -8,11 +8,15 @@ module Main where
 import Control.Exception (try, SomeException)
 import Data.Char (isSpace)
 import Data.List (find, intercalate, isPrefixOf, isInfixOf)
+import Data.Word (Word32)
+import qualified Data.Map.Strict as Map
 import System.Directory (listDirectory, doesFileExist, doesDirectoryExist)
 import System.Environment (getArgs)
 import System.FilePath ((</>))
 import System.IO (openFile, IOMode(..), hGetContents', hClose)
 import System.Process (readProcess)
+import qualified DBus
+import qualified DBus.Client as DBus
 
 -- Theme colors with defaults
 data Theme = Theme
@@ -138,24 +142,74 @@ cachedLookup cacheFile discover = do
         Just path -> writeFile cacheFile path >> return (Just path)
         Nothing   -> return Nothing
 
+-- UPower (battery via D-Bus). Avoids vendor-specific sysfs differences
+-- (e.g. ThinkPad exposes power_now, Framework exposes current_now).
+
+data UPowerInfo = UPowerInfo
+  { upPercent :: Int       -- 0..100
+  , upState   :: Word32    -- 0=Unknown 1=Charging 2=Discharging 3=Empty 4=Full ...
+  , upWatts   :: Double    -- positive (always magnitude)
+  } deriving Show
+
+queryUPower :: IO (Maybe UPowerInfo)
+queryUPower = do
+  result <- try go :: IO (Either SomeException (Maybe UPowerInfo))
+  return $ either (const Nothing) id result
+  where
+    go = do
+      client <- DBus.connectSystem
+      reply  <- DBus.call_ client (DBus.methodCall
+                  (DBus.objectPath_ "/org/freedesktop/UPower")
+                  (DBus.interfaceName_ "org.freedesktop.UPower")
+                  (DBus.memberName_ "EnumerateDevices"))
+                  { DBus.methodCallDestination = Just (DBus.busName_ "org.freedesktop.UPower") }
+      let paths = case DBus.methodReturnBody reply of
+                    [v] -> maybe [] id (DBus.fromVariant v :: Maybe [DBus.ObjectPath])
+                    _   -> []
+      let isBat p = "battery_" `isInfixOf` DBus.formatObjectPath p
+      case filter isBat paths of
+        []      -> DBus.disconnect client >> return Nothing
+        (bp:_)  -> do
+          info <- readBatteryProps client bp
+          DBus.disconnect client
+          return (Just info)
+
+    readBatteryProps client objPath = do
+      let getProp prop = do
+            r <- DBus.call_ client (DBus.methodCall
+                    objPath
+                    (DBus.interfaceName_ "org.freedesktop.DBus.Properties")
+                    (DBus.memberName_ "Get"))
+                    { DBus.methodCallDestination = Just (DBus.busName_ "org.freedesktop.UPower")
+                    , DBus.methodCallBody =
+                        [ DBus.toVariant ("org.freedesktop.UPower.Device" :: String)
+                        , DBus.toVariant (prop :: String) ] }
+            return $ case DBus.methodReturnBody r of
+                       [v] -> DBus.fromVariant v :: Maybe DBus.Variant
+                       _   -> Nothing
+      mPct   <- getProp "Percentage"
+      mState <- getProp "State"
+      mRate  <- getProp "EnergyRate"
+      let pct  = maybe 0   id (mPct   >>= DBus.fromVariant :: Maybe Double)
+          st   = maybe 0   id (mState >>= DBus.fromVariant :: Maybe Word32)
+          rate = maybe 0.0 id (mRate  >>= DBus.fromVariant :: Maybe Double)
+      return $ UPowerInfo (round pct) st (abs rate)
+
 -- Widgets
 
 battery :: Theme -> IO ()
 battery t = do
-  mbat <- findFirst "/sys/class/power_supply" "BAT"
-  case mbat of
+  mInfo <- queryUPower
+  case mInfo of
     Nothing -> return ()
-    Just bat -> do
-      capS   <- trim <$> readFileSafe (bat </> "capacity")
-      status <- trim <$> readFileSafe (bat </> "status")
-      let cap = readInt capS
-          ico = case status of
-                  "Charging"    -> "\xF0E7"
-                  "Discharging" -> "\xF240"
-                  _             -> "\xF1E6"
-          color | cap <= 20  = tErr t
-                | cap <= 80  = tWarn t
-                | otherwise  = tGood t
+    Just (UPowerInfo cap st _) -> do
+      let ico = case st of
+                  1 -> "\xF0E7"   -- Charging
+                  2 -> "\xF240"   -- Discharging
+                  _ -> "\xF1E6"   -- Full / Unknown
+          color | cap <= 20 = tErr t
+                | cap <= 80 = tWarn t
+                | otherwise = tGood t
       putStr $ icon color ico ++ " " ++ show cap ++ "%"
 
 brightness :: Theme -> IO ()
@@ -317,33 +371,22 @@ formatGpuCard t line = case words line of
 
 power :: Theme -> IO ()
 power t = do
-  mbat <- findFirst "/sys/class/power_supply" "BAT"
-  case mbat of
+  mInfo <- queryUPower
+  case mInfo of
     Nothing -> return ()
-    Just bat -> do
-      status <- trim <$> readFileSafe (bat </> "status")
-      -- Prefer power_now (uW) when available; fall back to current_now × voltage_now
-      pS  <- trim <$> readFileSafe (bat </> "power_now")
-      let pNow = abs (readInt pS)
-      uW <- if pNow > 0 then return pNow else do
-              vS <- trim <$> readFileSafe (bat </> "voltage_now")
-              cS <- trim <$> readFileSafe (bat </> "current_now")
-              let v = readInt vS                  -- uV
-                  c = abs (readInt cS)            -- uA
-              return $ if v > 0 && c > 0
-                       then (v `div` 1000) * (c `div` 1000)  -- uW
-                       else 0
-      let w10 = uW `div` 100000                   -- 0.1W units
+    Just (UPowerInfo _ st watts) | watts > 0 -> do
+      let w10  = round (watts * 10) :: Int
           wInt = w10 `div` 10
           wDec = w10 `mod` 10
           wStr = show wInt ++ "." ++ show wDec ++ "W"
-          color | wInt < 15  = tGood t
-                | wInt < 25  = tWarn t
-                | otherwise  = tErr t
-      case status of
-        "Discharging" -> putStr $ icon color "\xF0E7" ++ " " ++ wStr
-        "Charging"    -> putStr $ icon (tGood t) "\xF0E7" ++ " +" ++ wStr
-        _             -> return ()
+          color | wInt < 15 = tGood t
+                | wInt < 25 = tWarn t
+                | otherwise = tErr t
+      case st of
+        2 -> putStr $ icon color    "\xF0E7" ++ " "  ++ wStr  -- Discharging
+        1 -> putStr $ icon (tGood t) "\xF0E7" ++ " +" ++ wStr  -- Charging
+        _ -> return ()
+    _ -> return ()
 
 camera :: Theme -> IO ()
 camera t = do
