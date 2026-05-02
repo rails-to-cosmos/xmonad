@@ -89,8 +89,6 @@ myKeys =
     , ("M-S-t", namedScratchpadAction myScratchpads "terminal")
     , ("M-s", namedScratchpadAction myScratchpads "btop")
     , ("M-v", namedScratchpadAction myScratchpads "pavucontrol")
-    , ("M-c", spawn "telegram")
-    , ("M-S-c", spawn "slack")
     , ("M-e", namedScratchpadAction myScratchpads "emacs-scratch")
     , ("M-S-v", spawn "sh -c 'if lsmod | grep -q uvcvideo; then sudo modprobe -r uvcvideo; else sudo modprobe uvcvideo; fi'")
     , ("M-S-k", prevWS)
@@ -103,6 +101,7 @@ myKeys =
     , ("<XF86MonBrightnessDown>", spawn "brightnessctl --class=backlight set 5%-")
     , ("<XF86MonBrightnessUp>", spawn "brightnessctl --class=backlight set +5%")
     , ("M-S-g", spawn "~/.config/xmonad/scripts/dgpu-control.sh")
+    , ("M-S-r", spawn "~/.config/xmonad/scripts/refresh-rate.sh")
     , ("M-<Escape>", spawn $ "echo -e 'Lock\nLogout\nSuspend\nReboot\nShutdown' | rofi -dmenu -p 'Power' " ++ rofiFlags ++ " | xargs -I{} sh -c 'case {} in Lock) loginctl lock-session;; Logout) xmonad --restart && killall xmonad;; Suspend) systemctl suspend;; Reboot) systemctl reboot;; Shutdown) systemctl poweroff;; esac'")
     ]
 

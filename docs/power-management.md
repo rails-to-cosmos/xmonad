@@ -227,6 +227,133 @@ If still seeing >20W idle, the dGPU is the culprit. Check section above.
 
 ---
 
+## Further Optimizations
+
+After the initial fixes (achieved ~43% reduction: 31W → 17.7W), these can squeeze out additional savings to reach the 8-15W idle target.
+
+### High Impact (-3 to -5W combined)
+
+#### 1. AC/Battery profile auto-switching
+
+Switch CPU/GPU policies based on power source via `power-profiles-daemon` + udev:
+
+```bash
+sudo pacman -S power-profiles-daemon
+sudo systemctl enable --now power-profiles-daemon
+```
+
+```ini
+# /etc/udev/rules.d/99-power-profile.rules
+SUBSYSTEM=="power_supply", ATTR{online}=="0", RUN+="/usr/bin/powerprofilesctl set power-saver"
+SUBSYSTEM=="power_supply", ATTR{online}=="1", RUN+="/usr/bin/powerprofilesctl set balanced"
+```
+
+#### 2. Display refresh rate on battery
+
+Framework 16 panel runs at 165Hz by default — drops 1.5-2W at 60Hz:
+
+```bash
+xrandr --output eDP --rate 60     # save battery
+xrandr --output eDP --rate 165    # back to perf
+```
+
+A keybind/script for interactive selection is wired up at `~/.config/xmonad/scripts/refresh-rate.sh` (M-S-r).
+
+#### 3. AMD iGPU power profile
+
+Lock iGPU clocks to low on battery:
+
+```bash
+echo "low" | sudo tee /sys/class/drm/card2/device/power_dpm_force_performance_level   # battery
+echo "auto" | sudo tee /sys/class/drm/card2/device/power_dpm_force_performance_level  # AC
+```
+
+Saves 1-2W during idle.
+
+### Medium Impact (-1 to -2W combined)
+
+#### 4. Audio codec power save
+
+```bash
+# /etc/modprobe.d/audio-power.conf
+options snd_hda_intel power_save=1 power_save_controller=Y
+```
+
+#### 5. Bluetooth disable on battery
+
+Add to `power-tweaks.sh`:
+```bash
+is_battery && rfkill block bluetooth
+```
+
+#### 6. Idle suspend
+
+```ini
+# /etc/systemd/logind.conf.d/suspend.conf
+[Login]
+HandleLidSwitch=suspend
+IdleAction=suspend
+IdleActionSec=15min
+```
+
+### Low Impact (-0.5 to -1W combined)
+
+#### 7. Disable unused services
+
+Audit and disable services not in use:
+
+```bash
+systemctl list-timers
+systemctl list-units --type=service --state=running
+
+# Common targets if not needed:
+sudo systemctl disable bluetooth.service       # if no BT use
+sudo systemctl disable cups.service            # no printing
+sudo systemctl disable ModemManager.service    # no cellular
+```
+
+#### 8. Unload unused kernel modules
+
+```bash
+lsmod | head -30
+
+# Examples:
+sudo modprobe -r snd_hda_codec_hdmi  # if no HDMI audio
+sudo modprobe -r uvcvideo            # webcam (toggleable via M-S-v)
+```
+
+#### 9. Compositor tuning (picom)
+
+If running picom on battery:
+- Disable shadows
+- Use `xrender` backend instead of `glx`
+- Reduce/disable blur
+
+---
+
+## Diagnostic-Driven Workflow
+
+After each change, measure:
+
+```bash
+upower -i $(upower -e | grep BAT) | grep energy-rate
+```
+
+Or watch the live xmobar power widget (`%power%`) for real-time delta.
+
+---
+
+## Power Reduction Tracker
+
+| Phase                                | Power Draw   | Notes                                    |
+|--------------------------------------|--------------|------------------------------------------|
+| Initial baseline                     | 31W          | dGPU active, brightness 100%, no tweaks  |
+| After power-tweaks.sh + dGPU disable | 17.7W        | -43%; in yellow zone                     |
+| Target (idle, terminal)              | 8-12W        | Green zone                               |
+| Target (light browsing)              | 12-15W       | Green zone                               |
+
+---
+
 ## References
 
 - [Framework Laptop 16 ArchWiki](https://wiki.archlinux.org/title/Framework_Laptop_16)
