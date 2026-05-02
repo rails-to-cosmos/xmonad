@@ -53,6 +53,7 @@ myStartupHook = do
     -- spawn "setxkbmap -layout us,ru -option '' -option grp:shifts_toggle"
     spawn "~/.config/xmonad/scripts/setup-inputs.sh"
     spawn "~/.config/xmonad/scripts/audio-fix.sh"
+    spawn "~/.config/xmonad/scripts/build-xmobar-status.sh"
     -- spawn "sudo -n ~/.config/xmonad/scripts/power-tweaks.sh"
     spawnOnce "dunst"
     spawnOnce "/usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1"

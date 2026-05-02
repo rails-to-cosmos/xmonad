@@ -321,20 +321,24 @@ power t = do
   case mbat of
     Nothing -> return ()
     Just bat -> do
-      vS <- trim <$> readFileSafe (bat </> "voltage_now")
-      cS <- trim <$> readFileSafe (bat </> "current_now")
       status <- trim <$> readFileSafe (bat </> "status")
-      let v = readInt vS                    -- uV
-          c = abs (readInt cS)              -- uA (abs in case kernel reports signed)
-          w10 = if v > 0 && c > 0           -- 0.1W units
-                  then (v `div` 1000) * (c `div` 1000) `div` 100000
-                  else 0
+      -- Prefer power_now (uW) when available; fall back to current_now × voltage_now
+      pS  <- trim <$> readFileSafe (bat </> "power_now")
+      let pNow = abs (readInt pS)
+      uW <- if pNow > 0 then return pNow else do
+              vS <- trim <$> readFileSafe (bat </> "voltage_now")
+              cS <- trim <$> readFileSafe (bat </> "current_now")
+              let v = readInt vS                  -- uV
+                  c = abs (readInt cS)            -- uA
+              return $ if v > 0 && c > 0
+                       then (v `div` 1000) * (c `div` 1000)  -- uW
+                       else 0
+      let w10 = uW `div` 100000                   -- 0.1W units
           wInt = w10 `div` 10
           wDec = w10 `mod` 10
           wStr = show wInt ++ "." ++ show wDec ++ "W"
           color | wInt < 15  = tGood t
                 | wInt < 25  = tWarn t
-                | wInt < 40  = tErr t
                 | otherwise  = tErr t
       case status of
         "Discharging" -> putStr $ icon color "\xF0E7" ++ " " ++ wStr
