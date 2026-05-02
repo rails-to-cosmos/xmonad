@@ -46,8 +46,8 @@ The script applies:
 
 Bind in xmonad keybinds:
 ```haskell
-("<XF86MonBrightnessDown>", spawn "brightnessctl -d amdgpu_bl2 set 5%-")
-("<XF86MonBrightnessUp>",   spawn "brightnessctl -d amdgpu_bl2 set +5%")
+("<XF86MonBrightnessDown>", spawn "brightnessctl --class=backlight set 5%-")
+("<XF86MonBrightnessUp>",   spawn "brightnessctl --class=backlight set +5%")
 ```
 
 ---

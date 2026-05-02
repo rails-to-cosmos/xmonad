@@ -30,6 +30,10 @@ sudo apt-get install -y \
 sudo apt-get install -y \
     alsa-utils
 
+# Brightness control (powers the XF86MonBrightness keybinds)
+sudo apt-get install -y \
+    brightnessctl
+
 # Display auto-configuration (saves/restores xrandr profiles based on connected displays)
 sudo apt-get install -y \
     autorandr

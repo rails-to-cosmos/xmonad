@@ -34,6 +34,19 @@ notify() {
     echo "$1"
 }
 
+# 3. Privileged execution helper - uses pkexec from GUI, sudo from terminal
+priv_run() {
+    # If launched from a terminal, sudo can prompt; otherwise pkexec
+    if [ -t 0 ] || [ -t 1 ]; then
+        sudo "$@"
+    elif command -v pkexec >/dev/null 2>&1; then
+        pkexec "$@"
+    else
+        notify "✗ Need pkexec or terminal sudo to run privileged ops"
+        return 1
+    fi
+}
+
 # 3. Status reporting
 show_status() {
     if [ -z "$DGPU_PCI" ]; then
@@ -60,7 +73,7 @@ set_runtime_pm() {
         notify "✗ dGPU not present (run --rescan first?)"
         return 1
     fi
-    sudo sh -c "echo '$mode' > '$DGPU_DIR/power/control'"
+    priv_run sh -c "echo '$mode' > '$DGPU_DIR/power/control'"
     case "$mode" in
         auto) notify "✓ dGPU: auto (kernel-managed power, sleeps when idle)" ;;
         on)   notify "✓ dGPU: forced ON (gaming mode, full performance)" ;;
@@ -80,12 +93,12 @@ remove_dgpu() {
             notify "⚠ $connected display(s) connected via dGPU - removal will disconnect them!"
         fi
     fi
-    sudo sh -c "echo 1 > '$DGPU_DIR/remove'"
+    priv_run sh -c "echo 1 > '$DGPU_DIR/remove'"
     notify "✓ dGPU removed from PCI bus (max power savings)"
 }
 
 rescan_pci() {
-    sudo sh -c "echo 1 > /sys/bus/pci/rescan"
+    priv_run sh -c "echo 1 > /sys/bus/pci/rescan"
     notify "✓ PCI bus rescanned (dGPU should be back)"
     sleep 1
     [ -e "$DGPU_DIR" ] && set_runtime_pm "auto" || true

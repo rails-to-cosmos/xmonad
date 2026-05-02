@@ -24,6 +24,10 @@ sudo pacman -S --needed --noconfirm \
 sudo pacman -S --needed --noconfirm \
     alsa-utils
 
+# Brightness control (powers the XF86MonBrightness keybinds)
+sudo pacman -S --needed --noconfirm \
+    brightnessctl
+
 # Display auto-configuration (saves/restores xrandr profiles based on connected displays)
 sudo pacman -S --needed --noconfirm \
     autorandr

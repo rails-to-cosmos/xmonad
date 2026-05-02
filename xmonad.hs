@@ -99,8 +99,9 @@ myKeys =
     , ("C-M-S-<Left>", shiftToPrev >> prevWS)
     , ("C-M-S-<Right>", shiftToNext >> nextWS)
     , ("C-M-q", spawn "xmonad --recompile && xmonad --restart")
-    , ("<XF86MonBrightnessDown>", spawn "brightnessctl -d amdgpu_bl2 set 5%-")
-    , ("<XF86MonBrightnessUp>", spawn "brightnessctl -d amdgpu_bl2 set +5%")
+    , ("<XF86MonBrightnessDown>", spawn "brightnessctl --class=backlight set 5%-")
+    , ("<XF86MonBrightnessUp>", spawn "brightnessctl --class=backlight set +5%")
+    , ("M-S-g", spawn "~/.config/xmonad/scripts/dgpu-control.sh")
     , ("M-<Escape>", spawn $ "echo -e 'Lock\nLogout\nSuspend\nReboot\nShutdown' | rofi -dmenu -p 'Power' " ++ rofiFlags ++ " | xargs -I{} sh -c 'case {} in Lock) loginctl lock-session;; Logout) xmonad --restart && killall xmonad;; Suspend) systemctl suspend;; Reboot) systemctl reboot;; Shutdown) systemctl poweroff;; esac'")
     ]
 
