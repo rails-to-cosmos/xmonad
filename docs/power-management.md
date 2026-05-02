@@ -17,27 +17,41 @@ Estimated battery life: **~3-4 hours** (target 6-8h with iGPU)
 | Runtime tweaks (ASPM, USB, WiFi PM) | 4-8W combined | ✅ `power-tweaks.sh` (run with sudo)                    |
 | Power widget in xmobar              | —             | ✅ `%power%` shows live W with color thresholds         |
 | polkit GUI auth agent               | —             | ✅ `polkit-gnome` autostarted from xmonad               |
+| Power profile daemon                | 2-5W          | ✅ `power-profiles-daemon` enabled; switcher M-S-p      |
 | NVMe power saving disabled          | 1-3W          | ⏳ `nvme_core.default_ps_max_latency_us=0` still in cmdline — remove via `/etc/default/grub` |
 | PCIe ASPM kernel default            | 2-4W          | ⏳ `pcie_aspm=force pcie_aspm.policy=powersupersave` not in cmdline |
-| Power management daemon             | 2-5W          | ⏳ `power-profiles-daemon` not installed                |
-| AMD iGPU power profile (battery)    | 1-2W          | ⏳ Always `auto`; no AC/battery switching               |
+| AMD iGPU power profile (battery)    | 1-2W          | ⏳ Always `auto`; no AC/battery auto-switching          |
 | Audio codec power_save              | 0.5-1W        | ⏳ Default (off)                                        |
 | Suspend wake sources                | drain in S3   | ⏳ 10+ devices still wake in S3/S4                      |
 | Bluetooth disable on battery        | 0.5-1W        | ⏳ Always on                                            |
 
 ---
 
-## Quick Wins (Apply First)
+## Daily Tools (Already Wired Up)
 
-### 1. Runtime tweaks script
+| Action               | Keybind   | Script                                            |
+|----------------------|-----------|---------------------------------------------------|
+| Toggle dGPU power    | `M-S-g`   | `~/.config/xmonad/scripts/dgpu-control.sh`        |
+| Switch power profile | `M-S-p`   | `~/.config/xmonad/scripts/power-profile.sh`       |
+| Switch refresh rate  | `M-S-r`   | `~/.config/xmonad/scripts/refresh-rate.sh`        |
+| Brightness up/down   | `XF86Mon*`| `brightnessctl --class=backlight set ±5%`         |
+| Apply runtime tweaks | (manual)  | `sudo ~/.config/xmonad/scripts/power-tweaks.sh`   |
 
-Use the helper at `~/.config/xmonad/scripts/power-tweaks.sh`. Run with sudo for full effect:
+### Live monitoring
 
+Watch the `%power%` widget in xmobar — color-coded:
+- 🟢 green: < 15W (target)
+- 🟡 yellow: 15-25W
+- 🔴 red: > 25W
+
+Or measure manually:
 ```bash
-sudo ~/.config/xmonad/scripts/power-tweaks.sh
+upower -i $(upower -e | grep BAT) | grep energy-rate
 ```
 
-The script applies:
+### Runtime tweaks script (run once per boot)
+
+`~/.config/xmonad/scripts/power-tweaks.sh` (sudo for full effect) applies:
 - PCIe ASPM → `powersupersave`
 - CPU energy preference → `power`
 - USB autosuspend → `auto`
@@ -45,16 +59,6 @@ The script applies:
 - WiFi power save → on
 - AMD GPU runtime PM → auto
 - Brightness reduction (50%) when on battery and currently >70%
-
-### 2. Lower screen brightness
-
-100% brightness is the single biggest controllable drain. Even 60% saves 3-5W.
-
-Bind in xmonad keybinds:
-```haskell
-("<XF86MonBrightnessDown>", spawn "brightnessctl --class=backlight set 5%-")
-("<XF86MonBrightnessUp>",   spawn "brightnessctl --class=backlight set +5%")
-```
 
 ---
 

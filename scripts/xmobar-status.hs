@@ -282,28 +282,12 @@ buildGpuCache cacheFile cards = go cards False
       hasGpu <- doesFileExist gpuFile
       if not hasGpu then go rest found
       else do
-        let deviceLink = "/sys/class/drm" </> card </> "device"
-        result <- try (readProcess "lspci" ["-s", "00:00.0"] "") :: IO (Either SomeException String)
-        -- Get PCI address from symlink
-        pciResult <- try (readProcess "readlink" [deviceLink] "") :: IO (Either SomeException String)
-        let pci = case pciResult of
-              Right p -> let s = trim p in reverse $ takeWhile (/= '/') (reverse s)
-              Left _  -> ""
-        desc <- if null pci then return ""
-                else do
-                  r <- try (readProcess "lspci" ["-s", pci] "") :: IO (Either SomeException String)
-                  return $ either (const "") trim r
-        let label = extractGpuLabel desc card
+        let bootVgaFile = "/sys/class/drm" </> card </> "device" </> "boot_vga"
+        bootVga <- trim <$> readFileSafe bootVgaFile
+        -- boot_vga=1 → primary/integrated GPU; 0 (or missing) → discrete
+        let label = if bootVga == "1" then "iGPU" else "dGPU"
         appendFile cacheFile (card ++ " " ++ label ++ "\n")
         go rest True
-
-extractGpuLabel :: String -> String -> String
-extractGpuLabel desc fallback =
-  let afterBracket = drop 1 $ dropWhile (/= ']') desc
-      trimmed = dropWhile (== ' ') afterBracket
-      beforeBracket = takeWhile (/= '[') trimmed
-      cleaned = reverse $ dropWhile isSpace $ reverse beforeBracket
-  in if null cleaned then fallback else cleaned
 
 gpuOutput :: Theme -> FilePath -> IO ()
 gpuOutput t cacheFile = do

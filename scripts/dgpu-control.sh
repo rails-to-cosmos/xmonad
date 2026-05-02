@@ -11,20 +11,22 @@
 set -e
 
 # 1. Locate the dGPU automatically (non-primary VGA controller)
-DGPU_PCI=""
-for f in /sys/bus/pci/devices/*/boot_vga; do
-    if [ "$(cat "$f" 2>/dev/null)" = "0" ]; then
-        DGPU_PCI=$(basename "$(dirname "$f")")
-        break
+detect_dgpu() {
+    DGPU_PCI=""
+    DGPU_DIR=""
+    DGPU_NAME=""
+    for f in /sys/bus/pci/devices/*/boot_vga; do
+        if [ "$(cat "$f" 2>/dev/null)" = "0" ]; then
+            DGPU_PCI=$(basename "$(dirname "$f")")
+            break
+        fi
+    done
+    if [ -n "$DGPU_PCI" ]; then
+        DGPU_DIR="/sys/bus/pci/devices/$DGPU_PCI"
+        DGPU_NAME=$(lspci -s "${DGPU_PCI#0000:}" 2>/dev/null | sed 's/.*: //' | cut -c1-60)
     fi
-done
-
-DGPU_DIR=""
-DGPU_NAME=""
-if [ -n "$DGPU_PCI" ]; then
-    DGPU_DIR="/sys/bus/pci/devices/$DGPU_PCI"
-    DGPU_NAME=$(lspci -s "${DGPU_PCI#0000:}" 2>/dev/null | sed 's/.*: //' | cut -c1-60)
-fi
+}
+detect_dgpu
 
 # 2. Notification helper (uses notify-send when in graphical context)
 notify() {
@@ -67,12 +69,23 @@ show_status() {
 }
 
 # 4. Operations (require sudo)
-set_runtime_pm() {
-    mode="$1"
+ensure_dgpu_present() {
+    [ -n "$DGPU_DIR" ] && [ -e "$DGPU_DIR" ] && return 0
+    notify "dGPU not present — rescanning PCI bus..."
+    priv_run sh -c "echo 1 > /sys/bus/pci/rescan"
+    sleep 1
+    rm -f /tmp/gpu-cards   # invalidate xmobar gpu widget cache
+    detect_dgpu
     if [ -z "$DGPU_DIR" ] || [ ! -e "$DGPU_DIR" ]; then
-        notify "✗ dGPU not present (run --rescan first?)"
+        notify "✗ Failed to bring back dGPU after rescan"
         return 1
     fi
+    return 0
+}
+
+set_runtime_pm() {
+    mode="$1"
+    ensure_dgpu_present || return 1
     priv_run sh -c "echo '$mode' > '$DGPU_DIR/power/control'"
     case "$mode" in
         auto) notify "✓ dGPU: auto (kernel-managed power, sleeps when idle)" ;;
@@ -94,6 +107,7 @@ remove_dgpu() {
         fi
     fi
     priv_run sh -c "echo 1 > '$DGPU_DIR/remove'"
+    rm -f /tmp/gpu-cards   # invalidate xmobar gpu widget cache
     notify "✓ dGPU removed from PCI bus (max power savings)"
 }
 
@@ -101,6 +115,7 @@ rescan_pci() {
     priv_run sh -c "echo 1 > /sys/bus/pci/rescan"
     notify "✓ PCI bus rescanned (dGPU should be back)"
     sleep 1
+    rm -f /tmp/gpu-cards   # invalidate xmobar gpu widget cache
     [ -e "$DGPU_DIR" ] && set_runtime_pm "auto" || true
 }
 
