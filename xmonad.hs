@@ -53,6 +53,7 @@ myStartupHook = do
     spawn "~/.config/xmonad/scripts/setup-inputs.sh"
     spawn "~/.config/xmonad/scripts/audio-fix.sh"
     spawnOnce "dunst"
+    spawnOnce "/usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1"
     spawnOnce "stalonetray --geometry 5x1+0+0 --icon-size 20 --slot-size 24 --bg '#000000' --icon-gravity NE --kludges force_icons_size -d none --window-strut top"
     spawnOnce "redshift -l 52.37:4.90"
     spawn "emacsclient -e '(kill-emacs)' 2>/dev/null; echo 'starting' > /tmp/emacs-status; emacs --daemon && echo 'ready' > /tmp/emacs-status || echo 'error' > /tmp/emacs-status"

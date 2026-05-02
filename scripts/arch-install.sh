@@ -28,6 +28,10 @@ sudo pacman -S --needed --noconfirm \
 sudo pacman -S --needed --noconfirm \
     brightnessctl
 
+# Polkit auth agent (enables GUI password prompts for pkexec, e.g., from rofi keybinds)
+sudo pacman -S --needed --noconfirm \
+    polkit-gnome
+
 # Display auto-configuration (saves/restores xrandr profiles based on connected displays)
 sudo pacman -S --needed --noconfirm \
     autorandr

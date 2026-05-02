@@ -34,6 +34,10 @@ sudo apt-get install -y \
 sudo apt-get install -y \
     brightnessctl
 
+# Polkit auth agent (enables GUI password prompts for pkexec, e.g., from rofi keybinds)
+sudo apt-get install -y \
+    policykit-1-gnome
+
 # Display auto-configuration (saves/restores xrandr profiles based on connected displays)
 sudo apt-get install -y \
     autorandr
