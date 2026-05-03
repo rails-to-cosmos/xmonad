@@ -8,7 +8,9 @@ module Main where
 import Control.Exception (try, SomeException)
 import Data.Char (isSpace)
 import Data.List (find, intercalate, isPrefixOf, isInfixOf)
-import Data.Word (Word32)
+import Data.Word (Word8, Word32)
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Char8 as BSC
 import qualified Data.Map.Strict as Map
 import System.Directory (listDirectory, doesFileExist, doesDirectoryExist)
 import System.Environment (getArgs)
@@ -195,6 +197,109 @@ queryUPower = do
           rate = maybe 0.0 id (mRate  >>= DBus.fromVariant :: Maybe Double)
       return $ UPowerInfo (round pct) st (abs rate)
 
+-- NetworkManager (wifi via D-Bus). Handles iw/iwd/wpa_supplicant uniformly.
+
+data NMWifi = NMWifi
+  { nmIface    :: String     -- "wlan0"
+  , nmSsid     :: String
+  , nmStrength :: Word8      -- 0..100
+  } deriving Show
+
+queryNMWifi :: IO (Maybe NMWifi)
+queryNMWifi = do
+  result <- try go :: IO (Either SomeException (Maybe NMWifi))
+  return $ either (const Nothing) id result
+  where
+    nmName = DBus.busName_ "org.freedesktop.NetworkManager"
+    nmRoot = DBus.objectPath_ "/org/freedesktop/NetworkManager"
+    propIf = DBus.interfaceName_ "org.freedesktop.DBus.Properties"
+
+    getProp client objPath iface prop = do
+      r <- DBus.call_ client (DBus.methodCall objPath propIf
+                              (DBus.memberName_ "Get"))
+              { DBus.methodCallDestination = Just nmName
+              , DBus.methodCallBody =
+                  [ DBus.toVariant (iface :: String)
+                  , DBus.toVariant (prop :: String) ] }
+      return $ case DBus.methodReturnBody r of
+                 [v] -> DBus.fromVariant v :: Maybe DBus.Variant
+                 _   -> Nothing
+
+    go = do
+      client <- DBus.connectSystem
+      reply  <- DBus.call_ client (DBus.methodCall nmRoot
+                  (DBus.interfaceName_ "org.freedesktop.NetworkManager")
+                  (DBus.memberName_ "GetDevices"))
+                  { DBus.methodCallDestination = Just nmName }
+      let devs = case DBus.methodReturnBody reply of
+                   [v] -> maybe [] id (DBus.fromVariant v :: Maybe [DBus.ObjectPath])
+                   _   -> []
+      info <- findActiveWifi client devs
+      DBus.disconnect client
+      return info
+
+    findActiveWifi _ [] = return Nothing
+    findActiveWifi client (dp:rest) = do
+      mdt <- getProp client dp "org.freedesktop.NetworkManager.Device" "DeviceType"
+      let dtype = maybe 0 id (mdt >>= DBus.fromVariant :: Maybe Word32)
+      if dtype /= 2     -- 2 = NM_DEVICE_TYPE_WIFI
+        then findActiveWifi client rest
+        else do
+          mIfV <- getProp client dp "org.freedesktop.NetworkManager.Device" "Interface"
+          let iface = maybe "" id (mIfV >>= DBus.fromVariant :: Maybe String)
+          mApV <- getProp client dp "org.freedesktop.NetworkManager.Device.Wireless" "ActiveAccessPoint"
+          case mApV >>= DBus.fromVariant :: Maybe DBus.ObjectPath of
+            Nothing                                   -> return Nothing
+            Just ap | DBus.formatObjectPath ap == "/" -> return Nothing
+            Just ap -> do
+              mSsid <- getProp client ap "org.freedesktop.NetworkManager.AccessPoint" "Ssid"
+              mStr  <- getProp client ap "org.freedesktop.NetworkManager.AccessPoint" "Strength"
+              let ssid = maybe "" BSC.unpack (mSsid >>= DBus.fromVariant :: Maybe BS.ByteString)
+                  strg = maybe 0  id          (mStr  >>= DBus.fromVariant :: Maybe Word8)
+              return $ Just (NMWifi iface ssid strg)
+
+-- NetworkManager active VPN/WireGuard connection lookup.
+
+queryNMVpn :: IO (Maybe String)
+queryNMVpn = do
+  result <- try go :: IO (Either SomeException (Maybe String))
+  return $ either (const Nothing) id result
+  where
+    nmName = DBus.busName_ "org.freedesktop.NetworkManager"
+    nmRoot = DBus.objectPath_ "/org/freedesktop/NetworkManager"
+    propIf = DBus.interfaceName_ "org.freedesktop.DBus.Properties"
+
+    getProp client objPath iface prop = do
+      r <- DBus.call_ client (DBus.methodCall objPath propIf
+                              (DBus.memberName_ "Get"))
+              { DBus.methodCallDestination = Just nmName
+              , DBus.methodCallBody =
+                  [ DBus.toVariant (iface :: String)
+                  , DBus.toVariant (prop :: String) ] }
+      return $ case DBus.methodReturnBody r of
+                 [v] -> DBus.fromVariant v :: Maybe DBus.Variant
+                 _   -> Nothing
+
+    go = do
+      client <- DBus.connectSystem
+      mActive <- getProp client nmRoot
+                   "org.freedesktop.NetworkManager" "ActiveConnections"
+      let acs = maybe [] id (mActive >>= DBus.fromVariant :: Maybe [DBus.ObjectPath])
+      name <- findVpn client acs
+      DBus.disconnect client
+      return name
+
+    findVpn _ [] = return Nothing
+    findVpn client (ap:rest) = do
+      mTy <- getProp client ap "org.freedesktop.NetworkManager.Connection.Active" "Type"
+      let ty = maybe "" id (mTy >>= DBus.fromVariant :: Maybe String)
+      if ty == "wireguard" || ty == "vpn"
+        then do
+          mId <- getProp client ap "org.freedesktop.NetworkManager.Connection.Active" "Id"
+          let cid = maybe "" id (mId >>= DBus.fromVariant :: Maybe String)
+          return (Just cid)
+        else findVpn client rest
+
 -- Widgets
 
 battery :: Theme -> IO ()
@@ -257,26 +362,19 @@ volume t = do
 
 wifi :: Theme -> IO ()
 wifi t = do
-  let iface = "wlan0"
-      stateFile = "/tmp/wifi-status-" ++ iface
-  result <- try (readProcess "iw" ["dev", iface, "link"] "")
-            :: IO (Either SomeException String)
-  let essid = case result of
-        Left _    -> ""
-        Right out -> case find ("SSID:" `isPrefixOf`) (map trim (lines out)) of
-          Just l  -> trim $ drop 5 l
-          Nothing -> ""
-  if null essid
-    then putStr $ icon (tDim t) "\xF1EB" ++ " " ++ fc (tDim t) "disconnected"
-    else do
+  mw <- queryNMWifi
+  case mw of
+    Nothing -> putStr $ icon (tDim t) "\xF1EB" ++ " " ++ fc (tDim t) "disconnected"
+    Just (NMWifi iface ssid _) -> do
+      let stateFile = "/tmp/wifi-status-" ++ iface
       rx <- readInt <$> readFileSafe ("/sys/class/net/" ++ iface ++ "/statistics/rx_bytes")
       tx <- readInt <$> readFileSafe ("/sys/class/net/" ++ iface ++ "/statistics/tx_bytes")
       prev <- readFileSafe stateFile
       let color = case words prev of
             [prS, ptS] ->
-              let pr = readInt prS
-                  pt = readInt ptS
-                  dt = 3
+              let pr  = readInt prS
+                  pt  = readInt ptS
+                  dt  = 30  -- xmobar polls wifi every 30s
                   rxR = (rx - pr) `div` dt
                   txR = (tx - pt) `div` dt
               in if rxR > 1000000 || txR > 1000000 then tGood t
@@ -285,20 +383,14 @@ wifi t = do
                  else tDim t
             _ -> tNormal t
       writeFile stateFile (show rx ++ " " ++ show tx)
-      putStr $ icon color "\xF1EB" ++ " " ++ fc color essid
+      putStr $ icon color "\xF1EB" ++ " " ++ fc color ssid
 
 vpn :: Theme -> IO ()
 vpn t = do
-  result <- try (readProcess "ip" ["-o", "link", "show", "type", "wireguard"] "")
-            :: IO (Either SomeException String)
-  let iface = case result of
-        Left _    -> ""
-        Right out -> case lines out of
-          (l:_) -> trim $ takeWhile (\c -> c /= '@' && c /= ':') $ drop 1 $ dropWhile (/= ':') l
-          _     -> ""
-  if null iface
-    then putStr $ icon (tDim t) "\xF0582" ++ " " ++ fc (tDim t) "off"
-    else putStr $ icon (tGood t) "\xF0582" ++ " " ++ fc (tGood t) iface
+  mName <- queryNMVpn
+  case mName of
+    Nothing   -> putStr $ icon (tDim  t) "\xF0582" ++ " " ++ fc (tDim  t) "off"
+    Just name -> putStr $ icon (tGood t) "\xF0582" ++ " " ++ fc (tGood t) name
 
 emacs :: Theme -> IO ()
 emacs t = do
