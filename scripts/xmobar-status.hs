@@ -474,10 +474,10 @@ power t = do
           color | wInt < 15 = tGood t
                 | wInt < 25 = tWarn t
                 | otherwise = tErr t
+      -- State: 0=Unknown 1=Charging 2=Discharging 3=Empty 4=Full 5=PendingCharge 6=PendingDischarge
       case st of
-        2 -> putStr $ icon color    "\xF0E7" ++ " "  ++ wStr  -- Discharging
-        1 -> putStr $ icon (tGood t) "\xF0E7" ++ " +" ++ wStr  -- Charging
-        _ -> return ()
+        2 -> putStr $ icon color     "\xF0E7" ++ " "  ++ wStr           -- Discharging
+        _ -> putStr $ icon (tGood t) "\xF0E7" ++ " +" ++ wStr           -- Charging / topping off / unknown
     _ -> return ()
 
 camera :: Theme -> IO ()
