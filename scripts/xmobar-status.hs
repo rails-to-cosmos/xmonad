@@ -365,25 +365,51 @@ wifi t = do
   mw <- queryNMWifi
   case mw of
     Nothing -> putStr $ icon (tDim t) "\xF1EB" ++ " " ++ fc (tDim t) "disconnected"
-    Just (NMWifi iface ssid _) -> do
+    Just (NMWifi iface ssid strength) -> do
       let stateFile = "/tmp/wifi-status-" ++ iface
       rx <- readInt <$> readFileSafe ("/sys/class/net/" ++ iface ++ "/statistics/rx_bytes")
       tx <- readInt <$> readFileSafe ("/sys/class/net/" ++ iface ++ "/statistics/tx_bytes")
       prev <- readFileSafe stateFile
-      let color = case words prev of
-            [prS, ptS] ->
-              let pr  = readInt prS
-                  pt  = readInt ptS
-                  dt  = 30  -- xmobar polls wifi every 30s
-                  rxR = (rx - pr) `div` dt
-                  txR = (tx - pt) `div` dt
-              in if rxR > 1000000 || txR > 1000000 then tGood t
-                 else if rxR > 100000 || txR > 100000 then tAccent t
-                 else if rxR > 1000 || txR > 1000 then tNormal t
-                 else tDim t
-            _ -> tNormal t
+      let (rxR, txR) = case words prev of
+            [prS, ptS] -> let dt = 30 :: Int  -- xmobar polls wifi every 30s
+                              pr = readInt prS
+                              pt = readInt ptS
+                          in ((rx - pr) `div` dt, (tx - pt) `div` dt)
+            _          -> (0, 0)
+          rateColor | rxR > 1000000 || txR > 1000000 = tGood t
+                    | rxR > 100000  || txR > 100000  = tAccent t
+                    | rxR > 1000    || txR > 1000    = tNormal t
+                    | otherwise                      = tDim t
+          str       = fromIntegral strength :: Int
+          strIcon | str >= 75 = "\xF0928"  -- wifi-strength-4
+                  | str >= 50 = "\xF0925"  -- wifi-strength-3
+                  | str >= 25 = "\xF0922"  -- wifi-strength-2
+                  | str >  0  = "\xF091F"  -- wifi-strength-1
+                  | otherwise = "\xF092B"  -- wifi-strength-outline
+          strColor  | str >= 50 = tGood t
+                    | str >= 25 = tWarn t
+                    | otherwise = tErr t
+          rxColor = directional rxR (tAccent t)  -- blues for download
+          txColor = directional txR (tGood   t)  -- greens for upload
+          rateStr =
+            "  " ++ fc rxColor ("\xF01DA " ++ humanRate rxR) ++
+            "  " ++ fc txColor ("\xF01DB " ++ humanRate txR)
+          directional r accent
+            | r > 100000 = accent  -- >100KB/s: full accent (bright)
+            | r > 1000   = tMid t  -- >1KB/s:  mid grey (some activity)
+            | otherwise  = tDim t  -- idle:    dim
       writeFile stateFile (show rx ++ " " ++ show tx)
-      putStr $ icon color "\xF1EB" ++ " " ++ fc color ssid
+      putStr $ icon strColor strIcon ++ " "
+            ++ fc rateColor ssid
+            ++ " " ++ fc (tDim t) (show str ++ "%")
+            ++ rateStr
+  where
+    humanRate :: Int -> String
+    humanRate n
+      | n >= 1048576 = let m10 = (n * 10) `div` 1048576
+                       in show (m10 `div` 10) ++ "." ++ show (m10 `mod` 10) ++ "M/s"
+      | n >= 1024    = show (n `div` 1024) ++ "K/s"
+      | otherwise    = show n ++ "B/s"
 
 vpn :: Theme -> IO ()
 vpn t = do
