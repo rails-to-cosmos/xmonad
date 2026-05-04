@@ -342,7 +342,11 @@ cputemp t = do
     Just hw -> do
       tempS <- readFileSafe (hw </> "temp1_input")
       let temp = readInt tempS `div` 1000
-      putStr $ show temp ++ "C"
+          color | temp <  50 = tGood t   -- cool
+                | temp <  70 = tNormal t -- normal
+                | temp <  85 = tWarn t   -- warm
+                | otherwise  = tErr t    -- hot
+      putStr $ fc color (show temp ++ "C")
 
 volume :: Theme -> IO ()
 volume t = do
