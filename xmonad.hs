@@ -11,6 +11,7 @@ import XMonad.Util.EZConfig (additionalKeysP)
 import qualified XMonad.StackSet as W
 import XMonad.Util.NamedScratchpad
 import XMonad.Util.Run (spawnPipe)
+import XMonad.Layout.IndependentScreens (countScreens)
 import XMonad.Util.SpawnOnce
 
 import System.IO (hPutStrLn)
@@ -110,7 +111,10 @@ myKeys =
 
 main :: IO ()
 main = do
-    xmproc <- spawnPipe "xmobar ~/.config/xmobar/xmobarrc"
+    nScreens <- countScreens
+    xmprocs  <- mapM
+        (\sid -> spawnPipe ("xmobar -x " ++ show (sid :: Int) ++ " ~/.config/xmobar/xmobarrc"))
+        [0 .. nScreens - 1]
     xmonad $
         ewmhFullscreen $
             ewmh $
@@ -128,7 +132,7 @@ main = do
                         , logHook =
                             dynamicLogWithPP
                                 xmobarPP
-                                    { ppOutput = hPutStrLn xmproc
+                                    { ppOutput = \msg -> mapM_ (`hPutStrLn` msg) xmprocs
                                     , ppLayout = const ""
                                     , ppTitle = xmobarColor myAccentColor "" . shorten 50
                                     , ppCurrent = xmobarColor myAccentColor "" . wrap "[" "]"
