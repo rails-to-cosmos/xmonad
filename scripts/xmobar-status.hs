@@ -17,6 +17,7 @@ import System.Environment (getArgs)
 import System.FilePath ((</>))
 import System.IO (openFile, IOMode(..), hGetContents', hClose)
 import System.Process (readProcess)
+import Data.Time.Clock.POSIX (getPOSIXTime)
 import qualified DBus
 import qualified DBus.Client as DBus
 
@@ -106,6 +107,17 @@ readInt :: String -> Int
 readInt s = case reads (trim s) of
   [(n, _)] -> n
   _        -> 0
+
+-- Blink helper. When `critical` is True, returns a wrapper that alternates
+-- bold (fn=3) with normal weight every 250ms (4 Hz) so the indicator
+-- visibly pulses without changing colors or widget width.
+-- Widgets that should blink need a matching poll interval (≤3 deciseconds)
+-- in xmobarrc, otherwise they re-render too slowly to see the alternation.
+blink :: Bool -> IO (String -> String)
+blink False = return id
+blink True  = do
+  bucket <- (floor :: Double -> Int) . (* 4) . realToFrac <$> getPOSIXTime
+  return $ if even bucket then \s -> "<fn=3>" ++ s ++ "</fn>" else id
 
 findHwmon :: [String] -> IO (Maybe FilePath)
 findHwmon names = do
@@ -315,7 +327,8 @@ battery t = do
           color | cap <= 20 = tErr t
                 | cap <= 80 = tWarn t
                 | otherwise = tGood t
-      putStr $ icon color ico ++ " " ++ show cap ++ "%"
+      wrap <- blink (cap <= 20)
+      putStr $ wrap (icon color ico ++ " " ++ show cap ++ "%")
 
 brightness :: Theme -> IO ()
 brightness t = do
@@ -342,11 +355,12 @@ cputemp t = do
     Just hw -> do
       tempS <- readFileSafe (hw </> "temp1_input")
       let temp = readInt tempS `div` 1000
-          color | temp <  50 = tGood t   -- cool
-                | temp <  70 = tNormal t -- normal
-                | temp <  85 = tWarn t   -- warm
-                | otherwise  = tErr t    -- hot
-      putStr $ fc color (show temp ++ "C")
+          color | temp <  50 = tGood t
+                | temp <  70 = tNormal t
+                | temp <  85 = tWarn t
+                | otherwise  = tErr t
+      wrap <- blink (temp >= 85)
+      putStr $ wrap (fc color (show temp ++ "C"))
 
 volume :: Theme -> IO ()
 volume t = do
@@ -504,20 +518,21 @@ power t = do
           color | wInt < 15 = tGood t
                 | wInt < 25 = tWarn t
                 | otherwise = tErr t
+      wrap <- blink (st == 2 && wInt >= 25)
       -- State: 0=Unknown 1=Charging 2=Discharging 3=Empty 4=Full 5=PendingCharge 6=PendingDischarge
       case st of
-        2 -> putStr $ icon color     "\xF0E7" ++ " "  ++ wStr           -- Discharging
-        _ -> putStr $ icon (tGood t) "\xF0E7" ++ " +" ++ wStr           -- Charging / topping off / unknown
+        2 -> putStr $ wrap (icon color     "\xF0E7" ++ " "  ++ wStr)    -- Discharging
+        _ -> putStr $        icon (tGood t) "\xF0E7" ++ " +" ++ wStr    -- Charging / topping off / unknown
     _ -> return ()
 
 camera :: Theme -> IO ()
 camera t = do
   modules <- readFileSafe "/proc/modules"
   let loaded = any (isPrefixOf "uvcvideo") (lines modules)
-      (color, ico) = if loaded
-                     then (tGood t, "\xF0208")  -- eye open = camera available
-                     else (tErr t, "\xF0209")   -- eye off = camera disabled
-  putStr $ icon color ico
+      ico    = if loaded then "\xF0208" else "\xF0209"
+      color  = if loaded then tGood t   else tErr t
+  wrap <- blink (not loaded)
+  putStr $ wrap (icon color ico)
 
 main :: IO ()
 main = do
