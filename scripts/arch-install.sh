@@ -37,6 +37,10 @@ sudo pacman -S --needed --noconfirm \
     power-profiles-daemon
 sudo systemctl enable --now power-profiles-daemon
 
+# Keyboard event/keysym debug (xev, useful for troubleshooting keybinds and remaps)
+sudo pacman -S --needed --noconfirm \
+    xorg-xev
+
 # Display auto-configuration (saves/restores xrandr profiles based on connected displays)
 sudo pacman -S --needed --noconfirm \
     autorandr
