@@ -51,7 +51,6 @@ myLayout = avoidStruts $ toggleLayouts (noBorders Full) $ smartBorders $ mySpaci
 myStartupHook :: X ()
 myStartupHook = do
     spawn "setxkbmap -layout us,ru -option '' -option ctrl:nocaps -option grp:shifts_toggle"
-    -- spawn "setxkbmap -layout us,ru -option '' -option grp:shifts_toggle"
     spawn "~/.config/xmonad/scripts/setup-inputs.sh"
     spawn "~/.config/xmonad/scripts/audio-fix.sh"
     spawn "~/.config/xmonad/scripts/build-xmobar-status.sh"
