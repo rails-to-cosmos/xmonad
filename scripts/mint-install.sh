@@ -43,6 +43,10 @@ sudo apt-get install -y \
     power-profiles-daemon
 sudo systemctl enable --now power-profiles-daemon
 
+# Keyboard event/keysym debug (xev, useful for troubleshooting keybinds and remaps)
+sudo apt-get install -y \
+    x11-utils
+
 # Display auto-configuration (saves/restores xrandr profiles based on connected displays)
 sudo apt-get install -y \
     autorandr
