@@ -362,7 +362,8 @@ battery t = do
                 | cap <= 80 = tWarn t
                 | otherwise = tGood t
       alert <- alertSymbol t "battery" (cap <= 20)
-      putStr $ iconSmall (tFg t) ico ++ " " ++ fc color (show cap) ++ "%" ++ alert
+      let icoFn = if st == 1 then iconXs else iconSmall
+      putStr $ icoFn (tFg t) ico ++ " " ++ fc color (show cap) ++ "%" ++ alert
 
 brightness :: Theme -> IO ()
 brightness t = do
