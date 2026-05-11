@@ -345,16 +345,23 @@ battery t = do
     Nothing -> return ()
     Just (UPowerInfo cap st _) -> do
       let ico = case st of
-                  1 -> "\xF0084"  -- nf-md-battery_charging
-                  2 | cap <= 30  -> "\xF12A1"  -- nf-md-battery_low
-                    | cap <= 70  -> "\xF12A2"  -- nf-md-battery_medium
-                    | otherwise  -> "\xF12A3"  -- nf-md-battery_high
-                  _ -> "\xF12A3"  -- nf-md-battery_high (full/unknown)
+                  1 -> "\xF0084"              -- nf-md-battery_charging
+                  2 | cap <= 10  -> "\xF008E" -- nf-md-battery_outline
+                    | cap <= 20  -> "\xF007A" -- nf-md-battery_20
+                    | cap <= 30  -> "\xF007B" -- nf-md-battery_30
+                    | cap <= 40  -> "\xF007C" -- nf-md-battery_40 (was _50 codepoint but actually 40)
+                    | cap <= 50  -> "\xF007D" -- nf-md-battery_50
+                    | cap <= 60  -> "\xF007E" -- nf-md-battery_60
+                    | cap <= 70  -> "\xF007F" -- nf-md-battery_70
+                    | cap <= 80  -> "\xF0080" -- nf-md-battery_80
+                    | cap <= 90  -> "\xF0081" -- nf-md-battery_90
+                    | otherwise  -> "\xF0079" -- nf-md-battery (full)
+                  _ -> "\xF0079"              -- nf-md-battery (full/unknown)
           color | cap <= 20 = tErr t
                 | cap <= 80 = tWarn t
                 | otherwise = tGood t
       alert <- alertSymbol t "battery" (cap <= 20)
-      putStr $ iconSmall color ico ++ " " ++ fc color (show cap) ++ "%" ++ alert
+      putStr $ iconSmall (tFg t) ico ++ " " ++ fc color (show cap) ++ "%" ++ alert
 
 brightness :: Theme -> IO ()
 brightness t = do
@@ -386,7 +393,7 @@ cputemp t = do
                 | temp <  85 = tWarn t
                 | otherwise  = tErr t
       alert <- alertSymbol t "cputemp" (temp >= 85)
-      putStr $ fc color (show temp) ++ "C" ++ alert
+      putStr $ fc color (show temp) ++ "\x00B0" ++ "C" ++ alert
 
 volume :: Theme -> IO ()
 volume t = do
