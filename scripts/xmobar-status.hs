@@ -97,11 +97,17 @@ trim = f . f where f = reverse . dropWhile isSpace
 fn1 :: String -> String
 fn1 s = "<fn=1>" ++ s ++ "</fn>"
 
+fn4 :: String -> String
+fn4 s = "<fn=4>" ++ s ++ "</fn>"
+
 fc :: String -> String -> String
 fc color s = "<fc=" ++ color ++ ">" ++ s ++ "</fc>"
 
 icon :: String -> String -> String
 icon color glyph = fn1 (fc color glyph)
+
+iconSmall :: String -> String -> String
+iconSmall color glyph = fn4 (fc color glyph)
 
 readInt :: String -> Int
 readInt s = case reads (trim s) of
@@ -339,14 +345,16 @@ battery t = do
     Nothing -> return ()
     Just (UPowerInfo cap st _) -> do
       let ico = case st of
-                  1 -> "\xF0E7"   -- Charging
-                  2 -> "\xF240"   -- Discharging
-                  _ -> "\xF1E6"   -- Full / Unknown
+                  1 -> "\xF0084"  -- nf-md-battery_charging
+                  2 | cap <= 30  -> "\xF12A1"  -- nf-md-battery_low
+                    | cap <= 70  -> "\xF12A2"  -- nf-md-battery_medium
+                    | otherwise  -> "\xF12A3"  -- nf-md-battery_high
+                  _ -> "\xF12A3"  -- nf-md-battery_high (full/unknown)
           color | cap <= 20 = tErr t
                 | cap <= 80 = tWarn t
                 | otherwise = tGood t
       alert <- alertSymbol t "battery" (cap <= 20)
-      putStr $ icon color ico ++ " " ++ show cap ++ "%" ++ alert
+      putStr $ iconSmall color ico ++ " " ++ fc color (show cap) ++ "%" ++ alert
 
 brightness :: Theme -> IO ()
 brightness t = do
@@ -412,10 +420,6 @@ wifi t = do
                               pt = readInt ptS
                           in ((rx - pr) `div` dt, (tx - pt) `div` dt)
             _          -> (0, 0)
-          rateColor | rxR > 1000000 || txR > 1000000 = tGood t
-                    | rxR > 100000  || txR > 100000  = tAccent t
-                    | rxR > 1000    || txR > 1000    = tNormal t
-                    | otherwise                      = tDim t
           str       = fromIntegral strength :: Int
           strIcon | str >= 75 = "\xF0928"  -- wifi-strength-4
                   | str >= 50 = "\xF0925"  -- wifi-strength-3
@@ -436,8 +440,8 @@ wifi t = do
             | otherwise  = tDim t  -- idle:    dim
       writeFile stateFile (show rx ++ " " ++ show tx)
       putStr $ icon strColor strIcon ++ " "
-            ++ fc rateColor ssid
-            ++ " " ++ fc (tDim t) (show str ++ "%")
+            ++ ssid
+            ++ " " ++ fc strColor (show str) ++ "%"
             ++ rateStr
   where
     humanRate :: Int -> String
@@ -532,15 +536,14 @@ power t = do
       let w10  = round (watts * 10) :: Int
           wInt = w10 `div` 10
           wDec = w10 `mod` 10
-          wStr = show wInt ++ "." ++ show wDec ++ "W"
           color | wInt < 15 = tGood t
                 | wInt < 25 = tWarn t
                 | otherwise = tErr t
       alert <- alertSymbol t "power" (st == 2 && wInt >= 25)
       -- State: 0=Unknown 1=Charging 2=Discharging 3=Empty 4=Full 5=PendingCharge 6=PendingDischarge
       case st of
-        2 -> putStr $ icon color     "\xF0E7" ++ " "  ++ wStr ++ alert  -- Discharging
-        _ -> putStr $ icon (tGood t) "\xF0E7" ++ " +" ++ wStr           -- Charging / topping off / unknown
+        2 -> putStr $ fc color ("-" ++ show wInt ++ "." ++ show wDec) ++ "W" ++ alert
+        _ -> putStr $ fc (tGood t) ("+" ++ show wInt ++ "." ++ show wDec) ++ "W"
     _ -> return ()
 
 camera :: Theme -> IO ()
