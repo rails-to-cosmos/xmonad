@@ -345,18 +345,13 @@ battery t = do
     Nothing -> return ()
     Just (UPowerInfo cap st _) -> do
       let ico = case st of
-                  1 -> "\xF0084"              -- nf-md-battery_charging
-                  2 | cap <= 10  -> "\xF008E" -- nf-md-battery_outline
-                    | cap <= 20  -> "\xF007A" -- nf-md-battery_20
-                    | cap <= 30  -> "\xF007B" -- nf-md-battery_30
-                    | cap <= 40  -> "\xF007C" -- nf-md-battery_40 (was _50 codepoint but actually 40)
-                    | cap <= 50  -> "\xF007D" -- nf-md-battery_50
-                    | cap <= 60  -> "\xF007E" -- nf-md-battery_60
-                    | cap <= 70  -> "\xF007F" -- nf-md-battery_70
-                    | cap <= 80  -> "\xF0080" -- nf-md-battery_80
-                    | cap <= 90  -> "\xF0081" -- nf-md-battery_90
-                    | otherwise  -> "\xF0079" -- nf-md-battery (full)
-                  _ -> "\xF0079"              -- nf-md-battery (full/unknown)
+                  1 -> "\xF0E7"               -- nf-fa-bolt (charging)
+                  2 | cap <= 12  -> "\xF244"  -- nf-fa-battery_empty
+                    | cap <= 37  -> "\xF243"  -- nf-fa-battery_quarter
+                    | cap <= 62  -> "\xF242"  -- nf-fa-battery_half
+                    | cap <= 87  -> "\xF241"  -- nf-fa-battery_three_quarters
+                    | otherwise  -> "\xF240"  -- nf-fa-battery_full
+                  _ -> "\xF240"               -- nf-fa-battery_full
           color | cap <= 20 = tErr t
                 | cap <= 80 = tWarn t
                 | otherwise = tGood t
