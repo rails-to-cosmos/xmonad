@@ -6,7 +6,7 @@ build-depends: base, directory, filepath, process, bytestring, dbus
 module Main where
 
 import Control.Exception (try, SomeException)
-import Data.Char (isSpace)
+import Data.Char (isDigit, isSpace)
 import Data.List (find, intercalate, isPrefixOf, isInfixOf)
 import Data.Word (Word8, Word32)
 import qualified Data.ByteString as BS
@@ -433,27 +433,46 @@ wifi t = do
           strColor  | str >= 50 = tGood t
                     | str >= 25 = tWarn t
                     | otherwise = tErr t
-          rxColor = directional rxR (tAccent t)  -- blues for download
-          txColor = directional txR (tGood   t)  -- greens for upload
+      now <- realToFrac <$> getPOSIXTime :: IO Double
+      rxBurst <- checkBurst "rx" rxR now
+      txBurst <- checkBurst "tx" txR now
+      let rxColor | rxBurst   = tAccent t
+                  | rxR > 1000 = tFg t
+                  | otherwise  = tMid t
+          txColor | txBurst   = tGood t
+                  | txR > 1000 = tFg t
+                  | otherwise  = tMid t
           rateStr =
-            "  " ++ fc rxColor ("\xF063 " ++ humanRate rxR) ++
-            "  " ++ fc txColor ("\xF062 " ++ humanRate txR)
-          directional r accent
-            | r > 100000 = accent  -- >100KB/s: full accent (bright)
-            | r > 1000   = tMid t  -- >1KB/s:  mid grey (some activity)
-            | otherwise  = tDim t  -- idle:    dim
+            let (rxVal, rxUnit) = humanRate rxR
+                (txVal, txUnit) = humanRate txR
+            in "  " ++ fc rxColor ("\xF063 " ++ rxVal) ++ rxUnit ++
+               "  " ++ fc txColor ("\xF062 " ++ txVal) ++ txUnit
       writeFile stateFile (show rx ++ " " ++ show tx)
       putStr $ icon strColor strIcon ++ " "
             ++ ssid
             ++ " " ++ fc strColor (show str) ++ "%"
             ++ rateStr
   where
-    humanRate :: Int -> String
+    burstThreshold = 512000  -- 500KB/s
+    burstWindowSec = 10.0
+    checkBurst :: String -> Int -> Double -> IO Bool
+    checkBurst dir rate now = do
+      let sf = "/tmp/xmobar-burst-" ++ dir
+      if rate > burstThreshold
+        then do
+          contents <- readFileSafe sf
+          case reads contents :: [(Double, String)] of
+            [(s, _)] -> return (now - s <= burstWindowSec)
+            _        -> writeFile sf (show now) >> return True
+        else do
+          _ <- try (removeFile ("/tmp/xmobar-burst-" ++ dir)) :: IO (Either SomeException ())
+          return False
+    humanRate :: Int -> (String, String)
     humanRate n
       | n >= 1048576 = let m10 = (n * 10) `div` 1048576
-                       in show (m10 `div` 10) ++ "." ++ show (m10 `mod` 10) ++ "M/s"
-      | n >= 1024    = show (n `div` 1024) ++ "K/s"
-      | otherwise    = show n ++ "B/s"
+                       in (show (m10 `div` 10) ++ "." ++ show (m10 `mod` 10), "M/s")
+      | n >= 1024    = (show (n `div` 1024), "K/s")
+      | otherwise    = (show n, "B/s")
 
 vpn :: Theme -> IO ()
 vpn t = do
@@ -546,9 +565,30 @@ power t = do
       alert <- alertSymbol t "power" (st == 2 && wInt >= 25)
       -- State: 0=Unknown 1=Charging 2=Discharging 3=Empty 4=Full 5=PendingCharge 6=PendingDischarge
       case st of
-        2 -> putStr $ fc color ("-" ++ show wInt ++ "." ++ show wDec) ++ "W" ++ alert
-        _ -> putStr $ fc (tGood t) ("+" ++ show wInt ++ "." ++ show wDec) ++ "W"
+        2 -> putStr $ "-" ++ fc color (show wInt ++ "." ++ show wDec) ++ "W" ++ alert
+        _ -> putStr $ "+" ++ fc (tGood t) (show wInt ++ "." ++ show wDec) ++ "W"
     _ -> return ()
+
+disk :: Theme -> IO ()
+disk t = do
+  df <- readProcess "df" ["-h", "/"] ""
+  let raw = case lines df of
+              (_:row:_) -> case words row of
+                             (_:_:_:avail:_) -> avail
+                             _ -> "?"
+              _ -> "?"
+      (num, unit) = span (\c -> c == '.' || isDigit c) raw
+      gb = case reads num of
+             [(n, _)] -> case unit of
+               "T" -> n * 1024 :: Double
+               "G" -> n
+               "M" -> n / 1024
+               _   -> n
+             _ -> 0
+      color | gb < 10   = tErr t
+            | gb < 50   = tWarn t
+            | otherwise = tGood t
+  putStr $ fc color num ++ unit
 
 camera :: Theme -> IO ()
 camera t = do
@@ -573,4 +613,5 @@ main = do
     ["emacs"]      -> emacs t
     ["gpu"]        -> gpu t
     ["power"]      -> power t
-    _              -> putStrLn "Usage: xmobar-status {battery|brightness|camera|cputemp|volume|wifi|vpn|emacs|gpu|power}"
+    ["disk"]       -> disk t
+    _              -> putStrLn "Usage: xmobar-status {battery|brightness|camera|cputemp|disk|volume|wifi|vpn|emacs|gpu|power}"
