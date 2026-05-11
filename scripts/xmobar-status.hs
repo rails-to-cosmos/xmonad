@@ -109,6 +109,12 @@ icon color glyph = fn1 (fc color glyph)
 iconSmall :: String -> String -> String
 iconSmall color glyph = fn4 (fc color glyph)
 
+fn5 :: String -> String
+fn5 s = "<fn=5>" ++ s ++ "</fn>"
+
+iconXs :: String -> String -> String
+iconXs color glyph = fn5 (fc color glyph)
+
 readInt :: String -> Int
 readInt s = case reads (trim s) of
   [(n, _)] -> n
@@ -423,19 +429,15 @@ wifi t = do
                           in ((rx - pr) `div` dt, (tx - pt) `div` dt)
             _          -> (0, 0)
           str       = fromIntegral strength :: Int
-          strIcon | str >= 75 = "\xF0928"  -- wifi-strength-4
-                  | str >= 50 = "\xF0925"  -- wifi-strength-3
-                  | str >= 25 = "\xF0922"  -- wifi-strength-2
-                  | str >  0  = "\xF091F"  -- wifi-strength-1
-                  | otherwise = "\xF092B"  -- wifi-strength-outline
+          strIcon = "\xF1EB"  -- nf-fa-wifi
           strColor  | str >= 50 = tGood t
                     | str >= 25 = tWarn t
                     | otherwise = tErr t
           rxColor = directional rxR (tAccent t)  -- blues for download
           txColor = directional txR (tGood   t)  -- greens for upload
           rateStr =
-            "  " ++ fc rxColor ("\xF01DA " ++ humanRate rxR) ++
-            "  " ++ fc txColor ("\xF01DB " ++ humanRate txR)
+            "  " ++ fc rxColor ("\xF063 " ++ humanRate rxR) ++
+            "  " ++ fc txColor ("\xF062 " ++ humanRate txR)
           directional r accent
             | r > 100000 = accent  -- >100KB/s: full accent (bright)
             | r > 1000   = tMid t  -- >1KB/s:  mid grey (some activity)
@@ -457,8 +459,8 @@ vpn :: Theme -> IO ()
 vpn t = do
   mName <- queryNMVpn
   case mName of
-    Nothing   -> putStr $ icon (tDim  t) "\xF0582" ++ " " ++ fc (tDim  t) "off"
-    Just name -> putStr $ icon (tGood t) "\xF0582" ++ " " ++ fc (tGood t) name
+    Nothing   -> putStr $ iconXs (tDim  t) "\xF09C" ++ " " ++ fc (tDim  t) "off"
+    Just name -> putStr $ iconXs (tGood t) "\xF023" ++ " " ++ fc (tGood t) name
 
 emacs :: Theme -> IO ()
 emacs t = do
@@ -509,7 +511,7 @@ gpuOutput t cacheFile = do
   parts <- mapM (formatGpuCard t) (filter (not . null) (lines contents))
   let nonEmpty = filter (not . null) parts
   if null nonEmpty then return ()
-  else putStr $ icon (tNormal t) "\xF0EA8" ++ " " ++ intercalate "  " nonEmpty ++ " | "
+  else putStr $ icon (tNormal t) "\xF26C" ++ " " ++ intercalate "  " nonEmpty ++ " | "
 
 formatGpuCard :: Theme -> String -> IO String
 formatGpuCard t line = case words line of
@@ -552,7 +554,7 @@ camera :: Theme -> IO ()
 camera t = do
   modules <- readFileSafe "/proc/modules"
   let loaded = any (isPrefixOf "uvcvideo") (lines modules)
-      ico    = if loaded then "\xF0208" else "\xF0209"
+      ico    = if loaded then "\xF030" else "\xF05E"
       color  = if loaded then tGood t   else tErr t
   putStr $ icon color ico
 
