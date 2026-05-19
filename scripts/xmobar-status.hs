@@ -591,6 +591,20 @@ disk t = do
             | otherwise = tGood t
   putStr $ fc color num ++ unit
 
+tray :: Theme -> IO ()
+tray t = do
+  let apps = [ ("slack",    "\xF198",  "#4A154B")  -- nf-fa-slack, Slack purple
+             , ("telegram", "\xF2C6",  "#26A5E4")  -- nf-fa-telegram, Telegram blue
+             ]
+  running <- mapM (checkApp t) apps
+  putStr $ unwords (filter (not . null) running)
+  where
+    checkApp _ (proc, ico, brandColor) = do
+      result <- try (readProcess "pgrep" ["-x", proc] "") :: IO (Either SomeException String)
+      case result of
+        Right s | not (null (trim s)) -> return $ icon brandColor ico
+        _ -> return ""
+
 camera :: Theme -> IO ()
 camera t = do
   modules <- readFileSafe "/proc/modules"
@@ -615,4 +629,5 @@ main = do
     ["gpu"]        -> gpu t
     ["power"]      -> power t
     ["disk"]       -> disk t
+    ["tray"]       -> tray t
     _              -> putStrLn "Usage: xmobar-status {battery|brightness|camera|cputemp|disk|volume|wifi|vpn|emacs|gpu|power}"
