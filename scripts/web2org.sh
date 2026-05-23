@@ -79,4 +79,4 @@ pandoc -f html -t org \
 notify-send 'web2org' "Saved $(basename "$out")"
 
 # Open in the existing emacs daemon (matches your M-<Return> binding).
-emacsclient -c -n "$out" &
+# emacsclient -c -n "$out" &
