@@ -54,6 +54,13 @@ sudo pacman -S --needed --noconfirm \
     pandoc-cli \
     xclip
 
+# LaTeX / pdflatex (needed for pandoc -> PDF and standalone LaTeX builds)
+sudo pacman -S --needed --noconfirm \
+    texlive-basic \
+    texlive-latex \
+    texlive-latexrecommended \
+    texlive-fontsrecommended
+
 # Natural scrolling for touchpad and mouse
 sudo tee /etc/X11/xorg.conf.d/30-natural-scroll.conf > /dev/null << 'EOF'
 Section "InputClass"

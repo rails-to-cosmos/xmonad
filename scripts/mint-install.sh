@@ -58,6 +58,12 @@ sudo apt-get install -y \
     pandoc \
     xclip
 
+# LaTeX / pdflatex (needed for pandoc -> PDF and standalone LaTeX builds)
+sudo apt-get install -y \
+    texlive-latex-base \
+    texlive-latex-recommended \
+    texlive-fonts-recommended
+
 # Natural scrolling for touchpad and mouse
 sudo tee /etc/X11/xorg.conf.d/30-natural-scroll.conf > /dev/null << 'EOF'
 Section "InputClass"
