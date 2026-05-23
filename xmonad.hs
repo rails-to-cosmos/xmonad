@@ -52,6 +52,7 @@ myStartupHook :: X ()
 myStartupHook = do
     spawn "setxkbmap -layout us,ru -option '' -option ctrl:nocaps -option grp:shifts_toggle"
     spawn "~/.config/xmonad/scripts/setup-inputs.sh"
+    spawn "~/.config/xmonad/scripts/caps-off.sh"
     spawn "~/.config/xmonad/scripts/audio-fix.sh"
     spawn "~/.config/xmonad/scripts/build-xmobar-status.sh"
     -- spawn "sudo -n ~/.config/xmonad/scripts/power-tweaks.sh"
@@ -105,6 +106,7 @@ myKeys =
     , ("M-S-g", spawn "~/.config/xmonad/scripts/dgpu-control.sh")
     , ("M-S-r", spawn "~/.config/xmonad/scripts/refresh-rate.sh")
     , ("M-S-p", spawn "~/.config/xmonad/scripts/power-profile.sh")
+    , ("M-o", spawn "~/.config/xmonad/scripts/web2org.sh")
     , ("M-<Escape>", spawn $ "echo -e 'Lock\nLogout\nSuspend\nReboot\nShutdown' | rofi -dmenu -p 'Power' " ++ rofiFlags ++ " | xargs -I{} sh -c 'case {} in Lock) loginctl lock-session;; Logout) xmonad --restart && killall xmonad;; Suspend) systemctl suspend;; Reboot) systemctl reboot;; Shutdown) systemctl poweroff;; esac'")
     ]
 

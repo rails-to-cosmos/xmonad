@@ -51,6 +51,11 @@ sudo apt-get install -y \
 sudo apt-get install -y \
     autorandr
 
+# Document conversion + clipboard (powers web2org.sh: HTML/PDF/MD -> org/latex etc.)
+sudo apt-get install -y \
+    pandoc \
+    xclip
+
 # Natural scrolling for touchpad and mouse
 sudo tee /etc/X11/xorg.conf.d/30-natural-scroll.conf > /dev/null << 'EOF'
 Section "InputClass"

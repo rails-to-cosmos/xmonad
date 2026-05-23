@@ -46,6 +46,11 @@ sudo pacman -S --needed --noconfirm \
     autorandr
 systemctl --user enable --now autorandr.service 2>/dev/null || true
 
+# Document conversion + clipboard (powers web2org.sh: HTML/PDF/MD -> org/latex etc.)
+sudo pacman -S --needed --noconfirm \
+    pandoc-cli \
+    xclip
+
 # Natural scrolling for touchpad and mouse
 sudo tee /etc/X11/xorg.conf.d/30-natural-scroll.conf > /dev/null << 'EOF'
 Section "InputClass"
