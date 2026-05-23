@@ -1,0 +1,183 @@
+#!/usr/bin/env -S uv run --script  # -*- mode: python -*-
+# /// script
+# requires-python = ">=3.9"
+# dependencies = [
+#    "faster-whisper",
+# ]
+# ///
+"""
+Whisper CLI shim backed by faster-whisper (CTranslate2).
+
+Same command-line surface as the openai-whisper CLI used by
+web2org.d/20-youtube.sh — drop-in replacement, no PyTorch dependency.
+
+Why faster-whisper:
+    - ~50 MB install (vs ~2 GB for torch)
+    - Up to ~4× faster on CPU
+    - Lower memory (int8 quantisation by default)
+    - Same model accuracy as openai-whisper
+
+System requirement: ffmpeg (used implicitly by faster-whisper for audio I/O).
+
+Models cache in ~/.cache/huggingface/ on first use.
+"""
+
+from __future__ import annotations
+import argparse
+import json as jsonlib
+import os
+import sys
+from pathlib import Path
+
+from faster_whisper import WhisperModel
+
+
+def fmt_ts(seconds: float, sep: str = ",") -> str:
+    """SRT/VTT-style timestamp: HH:MM:SS,mmm (sep=',' for SRT, '.' for VTT)."""
+    ms = int(round((seconds - int(seconds)) * 1000))
+    h, rem = divmod(int(seconds), 3600)
+    m, s = divmod(rem, 60)
+    return f"{h:02d}:{m:02d}:{s:02d}{sep}{ms:03d}"
+
+
+def write_txt(segments, out_path: Path) -> None:
+    with out_path.open("w", encoding="utf-8") as f:
+        for seg in segments:
+            f.write(seg.text.strip() + "\n")
+
+
+def write_vtt(segments, out_path: Path) -> None:
+    with out_path.open("w", encoding="utf-8") as f:
+        f.write("WEBVTT\n\n")
+        for seg in segments:
+            f.write(f"{fmt_ts(seg.start, '.')} --> {fmt_ts(seg.end, '.')}\n")
+            f.write(seg.text.strip() + "\n\n")
+
+
+def write_srt(segments, out_path: Path) -> None:
+    with out_path.open("w", encoding="utf-8") as f:
+        for i, seg in enumerate(segments, 1):
+            f.write(f"{i}\n")
+            f.write(f"{fmt_ts(seg.start)} --> {fmt_ts(seg.end)}\n")
+            f.write(seg.text.strip() + "\n\n")
+
+
+def write_tsv(segments, out_path: Path) -> None:
+    with out_path.open("w", encoding="utf-8") as f:
+        f.write("start\tend\ttext\n")
+        for seg in segments:
+            text = seg.text.strip().replace("\t", " ").replace("\n", " ")
+            f.write(f"{int(seg.start * 1000)}\t{int(seg.end * 1000)}\t{text}\n")
+
+
+def write_json(segments, info, out_path: Path) -> None:
+    data = {
+        "language": info.language,
+        "language_probability": info.language_probability,
+        "duration": info.duration,
+        "segments": [
+            {"id": i, "start": s.start, "end": s.end, "text": s.text}
+            for i, s in enumerate(segments)
+        ],
+    }
+    with out_path.open("w", encoding="utf-8") as f:
+        jsonlib.dump(data, f, ensure_ascii=False, indent=2)
+
+
+WRITERS = {
+    "txt":  write_txt,
+    "vtt":  write_vtt,
+    "srt":  write_srt,
+    "tsv":  write_tsv,
+    "json": write_json,
+    "all":  None,  # special case below
+}
+
+
+def detect_device_and_compute_type() -> tuple[str, str]:
+    """Pick GPU if CUDA visible, else CPU int8 (fast, low memory)."""
+    try:
+        import ctranslate2  # type: ignore[import]
+        if ctranslate2.get_cuda_device_count() > 0:
+            return ("cuda", "float16")
+    except Exception:
+        pass
+    return ("cpu", "int8")
+
+
+def main() -> int:
+    p = argparse.ArgumentParser(
+        description="faster-whisper CLI (drop-in shim for openai-whisper)",
+    )
+    p.add_argument("audio", help="audio file to transcribe")
+    p.add_argument("--model", default="small",
+                   help="model size: tiny|base|small|medium|large-v3 etc.")
+    p.add_argument("--output_dir", default=".", help="directory for output files")
+    p.add_argument("--output_format", default="txt",
+                   choices=list(WRITERS.keys()),
+                   help="txt|vtt|srt|tsv|json|all")
+    p.add_argument("--language", default=None,
+                   help="ISO 639-1 code; if omitted, auto-detect")
+    p.add_argument("--task", default="transcribe", choices=["transcribe", "translate"])
+    p.add_argument("--device", default=None, help="cpu|cuda (auto-detect by default)")
+    p.add_argument("--compute_type", default=None,
+                   help="int8|int8_float16|float16|float32 (auto by default)")
+    p.add_argument("--beam_size", type=int, default=5)
+    p.add_argument("--temperature", type=float, default=0.0)
+    p.add_argument("--vad_filter", action="store_true",
+                   help="filter silent segments with Silero VAD")
+    p.add_argument("--verbose", action="store_true")
+    args = p.parse_args()
+
+    audio_path = Path(args.audio)
+    if not audio_path.exists():
+        print(f"whisper: file not found: {audio_path}", file=sys.stderr)
+        return 1
+
+    out_dir = Path(args.output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Device / compute_type selection
+    if args.device and args.compute_type:
+        device, compute = args.device, args.compute_type
+    else:
+        device, compute = detect_device_and_compute_type()
+        if args.device:
+            device = args.device
+        if args.compute_type:
+            compute = args.compute_type
+
+    if args.verbose:
+        print(f"[whisper] device={device} compute={compute} model={args.model}",
+              file=sys.stderr)
+
+    model = WhisperModel(args.model, device=device, compute_type=compute)
+    segments, info = model.transcribe(
+        str(audio_path),
+        beam_size=args.beam_size,
+        language=args.language,
+        task=args.task,
+        vad_filter=args.vad_filter,
+        temperature=args.temperature,
+    )
+    segments = list(segments)  # materialize the iterator (we write multiple formats / progress)
+
+    base = audio_path.stem
+    formats = list(WRITERS) if args.output_format == "all" else [args.output_format]
+    formats = [f for f in formats if f != "all"]
+
+    for fmt in formats:
+        writer = WRITERS[fmt]
+        out_path = out_dir / f"{base}.{fmt}"
+        if fmt == "json":
+            writer(segments, info, out_path)  # type: ignore[arg-type]
+        else:
+            writer(segments, out_path)  # type: ignore[arg-type]
+        if args.verbose:
+            print(f"[whisper] wrote {out_path}", file=sys.stderr)
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
