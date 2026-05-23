@@ -22,9 +22,6 @@ fi
 sudo apt-get install -y \
     fonts-jetbrains-mono
 
-# System tray
-sudo apt-get install -y \
-    stalonetray
 
 # Audio (for volume widget)
 sudo apt-get install -y \
@@ -42,6 +39,11 @@ sudo apt-get install -y \
 sudo apt-get install -y \
     power-profiles-daemon
 sudo systemctl enable --now power-profiles-daemon
+
+# Email (mu4e + IMAP sync)
+sudo apt-get install -y \
+    isync \
+    mu4e
 
 # Keyboard event/keysym debug (xev, useful for troubleshooting keybinds and remaps)
 sudo apt-get install -y \

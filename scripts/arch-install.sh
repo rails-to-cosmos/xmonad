@@ -16,9 +16,6 @@ sudo pacman -S --needed --noconfirm \
     ttf-jetbrains-mono \
     ttf-jetbrains-mono-nerd
 
-# System tray
-sudo pacman -S --needed --noconfirm \
-    stalonetray
 
 # Audio (for volume widget)
 sudo pacman -S --needed --noconfirm \
@@ -36,6 +33,12 @@ sudo pacman -S --needed --noconfirm \
 sudo pacman -S --needed --noconfirm \
     power-profiles-daemon
 sudo systemctl enable --now power-profiles-daemon
+
+# Email (mu4e + IMAP sync)
+sudo pacman -S --needed --noconfirm \
+    isync
+paru -S --needed --noconfirm \
+    mu
 
 # Keyboard event/keysym debug (xev, useful for troubleshooting keybinds and remaps)
 sudo pacman -S --needed --noconfirm \
