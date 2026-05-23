@@ -58,11 +58,22 @@ sudo apt-get install -y \
     pandoc \
     xclip
 
+# Web-capture extras (powers web2org.d handlers: youtube + arxiv + pdf)
+# All previously system-installed dependencies are now self-contained uv scripts
+# in this repo's scripts/ directory (managed by `uv run --script` via PEP 723):
+#   scripts/yt-dlp     : YouTube metadata + auto-subs + audio extraction
+#   scripts/jq         : JSON queries (bundles libjq via PyPI `jq`)
+#   scripts/xmllint    : XPath queries (lxml wheel bundles libxml2)
+#   scripts/pdftotext  : PDF → text (pdfminer.six, pure Python)
+#   scripts/pdfinfo    : PDF metadata (pypdf, pure Python)
+# web2org.sh prepends scripts/ to PATH so handlers find these by name.
+# Only `uv` is required system-wide.
+# Optional: pipx install openai-whisper  (for YT fallback when auto-subs are missing)
+sudo apt-get install -y uv 2>/dev/null || curl -LsSf https://astral.sh/uv/install.sh | sh
+
 # LaTeX / pdflatex (needed for pandoc -> PDF and standalone LaTeX builds)
-sudo apt-get install -y \
-    texlive-latex-base \
-    texlive-latex-recommended \
-    texlive-fonts-recommended
+# Installs texlive-full (~3-5 GB) so all packages, fonts, and engines are available
+sudo apt-get install -y texlive-full
 
 # Natural scrolling for touchpad and mouse
 sudo tee /etc/X11/xorg.conf.d/30-natural-scroll.conf > /dev/null << 'EOF'

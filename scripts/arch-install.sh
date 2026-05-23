@@ -54,12 +54,23 @@ sudo pacman -S --needed --noconfirm \
     pandoc-cli \
     xclip
 
+# Web-capture extras (powers web2org.d handlers: youtube + arxiv + pdf)
+# All previously system-installed dependencies are now self-contained uv scripts
+# in this repo's scripts/ directory (managed by `uv run --script` via PEP 723):
+#   scripts/yt-dlp     : YouTube metadata + auto-subs + audio extraction
+#   scripts/jq         : JSON queries (bundles libjq via PyPI `jq`)
+#   scripts/xmllint    : XPath queries (lxml wheel bundles libxml2)
+#   scripts/pdftotext  : PDF → text (pdfminer.six, pure Python)
+#   scripts/pdfinfo    : PDF metadata (pypdf, pure Python)
+# web2org.sh prepends scripts/ to PATH so handlers find these by name.
+# Only `uv` is required system-wide (already installed by default on CachyOS).
+# Optional (install manually if you want whisper transcription fallback for YT):
+#   pacman -S whisper.cpp     OR    pipx install openai-whisper
+sudo pacman -S --needed --noconfirm uv
+
 # LaTeX / pdflatex (needed for pandoc -> PDF and standalone LaTeX builds)
-sudo pacman -S --needed --noconfirm \
-    texlive-basic \
-    texlive-latex \
-    texlive-latexrecommended \
-    texlive-fontsrecommended
+# Installs the full texlive group (~3-5 GB) so all packages, fonts, and engines are available
+sudo pacman -S --needed --noconfirm texlive
 
 # Natural scrolling for touchpad and mouse
 sudo tee /etc/X11/xorg.conf.d/30-natural-scroll.conf > /dev/null << 'EOF'

@@ -1,0 +1,24 @@
+#!/usr/bin/env -S uv run --script  # -*- mode: python -*-
+# /// script
+# dependencies = [
+#    "yt-dlp",
+# ]
+# ///
+"""
+Self-contained yt-dlp wrapper via uv inline-script.
+Acts as a drop-in replacement for the system `yt-dlp` CLI — uv manages the
+virtualenv and caches the install, so no `pacman -S yt-dlp` needed.
+
+Usage: identical to the upstream CLI.
+    yt-dlp <URL>
+    yt-dlp --help
+    yt-dlp --write-auto-subs --skip-download <URL>
+"""
+
+from __future__ import annotations
+import sys
+from yt_dlp import main
+
+if __name__ == "__main__":
+    # yt_dlp.main reads sys.argv[1:] internally; explicit pass for clarity.
+    sys.exit(main(sys.argv[1:]) or 0)

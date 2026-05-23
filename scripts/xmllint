@@ -1,0 +1,79 @@
+#!/usr/bin/env -S uv run --script  # -*- mode: python -*-
+# /// script
+# dependencies = ["lxml"]
+# ///
+"""
+Self-contained xmllint subset via lxml (which bundles libxml2 binaries in its wheel).
+
+Supports the flags actually used by web2org.d:
+    xmllint --xpath EXPR FILE
+    xmllint EXPR FILE          (just parse + reformat)
+
+XPath result handling matches xmllint:
+- string()/text() results print as strings
+- element results print serialized
+- multiple results print one per line
+"""
+
+from __future__ import annotations
+import sys
+import argparse
+from lxml import etree
+
+
+def render(item) -> str:
+    """Render a single XPath result the way xmllint does."""
+    if isinstance(item, str):
+        return item
+    if isinstance(item, (int, float, bool)):
+        return str(item)
+    if isinstance(item, etree._ElementUnicodeResult):
+        return str(item)
+    if isinstance(item, etree._Element):
+        return etree.tostring(item, pretty_print=False, encoding="unicode")
+    return str(item)
+
+
+def main() -> int:
+    p = argparse.ArgumentParser(description="xmllint subset (Python wrapper)")
+    p.add_argument("--xpath", metavar="EXPR", help="evaluate XPath expression")
+    p.add_argument("--noout", action="store_true",
+                   help="suppress output (just parse for validity)")
+    p.add_argument("file", nargs="?", help="input file (stdin if omitted or '-')")
+    args = p.parse_args()
+
+    if args.file and args.file != "-":
+        with open(args.file, "rb") as f:
+            data = f.read()
+    else:
+        data = sys.stdin.buffer.read()
+
+    try:
+        tree = etree.fromstring(data)
+    except etree.XMLSyntaxError as e:
+        print(f"xmllint: parse error: {e}", file=sys.stderr)
+        return 1
+
+    if args.xpath:
+        try:
+            result = tree.xpath(args.xpath)
+        except etree.XPathEvalError as e:
+            print(f"xmllint: XPath error: {e}", file=sys.stderr)
+            return 1
+
+        if isinstance(result, list):
+            for item in result:
+                print(render(item))
+        else:
+            print(render(result))
+        return 0
+
+    if not args.noout:
+        sys.stdout.write(
+            etree.tostring(tree, pretty_print=True, encoding="unicode")
+        )
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

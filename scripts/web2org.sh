@@ -1,17 +1,43 @@
 #!/usr/bin/env bash
-# Convert a webpage to an org-mode file (with LaTeX math preserved) using pandoc.
+# Web-capture dispatcher.
+#
+# Looks at the URL, picks the first matching handler from web2org.d/, and
+# delegates the work. The result is an org-mode file in an output directory
+# the handler chose (typically a subdir of ~/sync/resources/).
 #
 # Usage:
 #   web2org.sh [URL]
 #
-# If URL is omitted, opens a rofi prompt pre-filled with the X clipboard.
-# Output dir is $WEB2ORG_DIR (default: ~/sync/resources/articles).
-# Opens the resulting .org in your running emacs daemon.
+# With no URL, opens a rofi prompt pre-filled with the X clipboard.
+#
+# Handlers
+# --------
+# Each file matching web2org.d/[0-9][0-9]-*.sh is an executable handler.
+# Files run in lexical order, so a smaller numeric prefix = higher priority.
+# The handler contract is:
+#
+#     handler.sh match   URL   # exit 0 to claim this URL, non-zero to pass
+#     handler.sh capture URL   # do the work, print the output path on stdout
+#
+# To add a new content type, drop e.g. 40-mastodon.sh in web2org.d/, source
+# config.sh and lib.sh from it, and implement the two subcommands. Done.
+#
+# Override behavior with environment variables (see web2org.d/config.sh):
+#   WEB_CAPTURE_BASE          - root for default output dirs
+#   WEB_CAPTURE_ARTICLES_DIR  - HTML articles target
+#   WEB_CAPTURE_VIDEOS_DIR    - YouTube target
+#   WEB_CAPTURE_PAPERS_DIR    - PDF / arXiv target
+#   WEB_CAPTURE_OPEN=1        - spawn an emacsclient frame on success
+#   WEB_CAPTURE_COPY_PATH=1   - copy output path to the X clipboard (default on)
 
 set -euo pipefail
 
-OUT_DIR="${WEB2ORG_DIR:-$HOME/sync/resources/articles}"
-mkdir -p "$OUT_DIR"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Expose sibling uv-script tools (yt-dlp, jq, xmllint, pdftotext, pdfinfo) to handlers
+export PATH="$SCRIPT_DIR:$PATH"
+HANDLER_DIR="$SCRIPT_DIR/web2org.d"
+. "$HANDLER_DIR/config.sh"
+. "$HANDLER_DIR/lib.sh"
 
 url="${1:-}"
 if [[ -z "$url" ]]; then
@@ -20,63 +46,20 @@ if [[ -z "$url" ]]; then
 fi
 
 if [[ -z "${url:-}" ]]; then
-    notify-send 'web2org' 'No URL provided'
+    notify -u low "No URL provided"
     exit 1
 fi
 
-notify-send 'web2org' "Fetching $url"
-
-tmphtml="$(mktemp --suffix=.html)"
-trap 'rm -f "$tmphtml"' EXIT
-
-# Some sites block default curl UA; pretend to be a normal browser.
-curl -fsSL -A 'Mozilla/5.0' "$url" -o "$tmphtml" || {
-    notify-send -u critical 'web2org' "curl failed for $url"
-    exit 1
-}
-
-# If `readable` (readability-cli) is installed, pre-clean the HTML so pandoc
-# doesn't drag in nav/sidebar/footer junk.
-if command -v readable >/dev/null 2>&1; then
-    cleaned="$(mktemp --suffix=.html)"
-    trap 'rm -f "$tmphtml" "$cleaned"' EXIT
-    if readable "$tmphtml" > "$cleaned" 2>/dev/null && [[ -s "$cleaned" ]]; then
-        tmphtml="$cleaned"
+for h in "$HANDLER_DIR"/[0-9][0-9]-*.sh; do
+    [[ -x "$h" ]] || continue
+    if "$h" match "$url" 2>/dev/null; then
+        if ! "$h" capture "$url"; then
+            notify -u critical "Handler $(basename "$h") failed for $url"
+            exit 1
+        fi
+        exit 0
     fi
-fi
+done
 
-# Pull a title out of the HTML for the filename / org #+TITLE.
-title="$(grep -oP '(?<=<title>).*?(?=</title>)' "$tmphtml" | head -1 | tr -d '\n' || true)"
-[[ -z "$title" ]] && title="$(date +%Y%m%d-%H%M%S)-untitled"
-
-slug="$(printf '%s' "$title" \
-    | iconv -f utf-8 -t ascii//translit 2>/dev/null \
-    | tr -cs 'A-Za-z0-9' '-' \
-    | sed 's/^-//; s/-$//' \
-    | tr '[:upper:]' '[:lower:]' \
-    | cut -c1-80)"
-[[ -z "$slug" ]] && slug="$(date +%Y%m%d-%H%M%S)"
-out="$OUT_DIR/${slug}.org"
-
-# --wrap=none           : keep long lines (better for diffing & editing)
-# --mathjax             : preserve math; in org output this becomes $...$ / $$...$$
-# --shift-heading-level-by=1 : demote so the page H1 becomes an org level-2 heading,
-#                              leaving the #+TITLE as the top-level identity.
-pandoc -f html -t org \
-    --wrap=none \
-    --mathjax \
-    --shift-heading-level-by=1 \
-    "$tmphtml" -o "$out"
-
-# Prepend org metadata.
-{
-    printf '#+TITLE: %s\n' "$title"
-    printf '#+SOURCE: %s\n' "$url"
-    printf '#+DATE: %s\n\n' "$(date -I)"
-    cat "$out"
-} > "$out.tmp" && mv "$out.tmp" "$out"
-
-notify-send 'web2org' "Saved $(basename "$out")"
-
-# Open in the existing emacs daemon (matches your M-<Return> binding).
-# emacsclient -c -n "$out" &
+notify -u critical "No handler matched $url"
+exit 1

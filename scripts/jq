@@ -1,0 +1,70 @@
+#!/usr/bin/env -S uv run --script  # -*- mode: python -*-
+# /// script
+# dependencies = ["jq"]
+# ///
+"""
+Self-contained jq via the Python `jq` package (bundles libjq, no system install).
+
+Supports the common flags: -r/--raw-output, -c/--compact-output.
+Input via stdin or files. Drop-in replacement for the patterns used by web2org.d.
+"""
+
+from __future__ import annotations
+import sys
+import json
+import argparse
+import jq as jq_lib
+
+
+def iter_json_documents(text: str):
+    """Yield consecutive JSON documents from a string (like jq's input stream)."""
+    dec = json.JSONDecoder()
+    idx = 0
+    n = len(text)
+    while idx < n:
+        # skip whitespace
+        while idx < n and text[idx].isspace():
+            idx += 1
+        if idx >= n:
+            return
+        obj, end = dec.raw_decode(text, idx)
+        yield obj
+        idx = end
+
+
+def main() -> int:
+    p = argparse.ArgumentParser(description="jq (Python wrapper)")
+    p.add_argument("-r", "--raw-output", action="store_true",
+                   help="output raw strings, not JSON")
+    p.add_argument("-c", "--compact-output", action="store_true",
+                   help="compact output (one JSON value per line)")
+    p.add_argument("filter", help="jq filter")
+    p.add_argument("files", nargs="*", help="input files (stdin if omitted)")
+    args = p.parse_args()
+
+    # Gather input documents
+    if args.files:
+        documents = []
+        for f in args.files:
+            with open(f) as fp:
+                documents.extend(iter_json_documents(fp.read()))
+    else:
+        documents = list(iter_json_documents(sys.stdin.read()))
+
+    program = jq_lib.compile(args.filter)
+
+    for doc in documents:
+        for result in program.input(doc).all():
+            if args.raw_output and isinstance(result, str):
+                print(result)
+            elif result is None:
+                print("null")
+            elif args.compact_output or args.raw_output:
+                print(json.dumps(result, ensure_ascii=False))
+            else:
+                print(json.dumps(result, indent=2, ensure_ascii=False))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,61 @@
+#!/usr/bin/env -S uv run --script  # -*- mode: python -*-
+# /// script
+# dependencies = ["pypdf"]
+# ///
+"""
+Self-contained pdfinfo via pypdf (pure Python, no system poppler).
+
+Emits `Key: Value` lines matching poppler-utils pdfinfo's output format —
+so `awk -F': +' '/^Title:/{print $2}'` from web2org.d/30-pdf.sh still works.
+
+Usage: pdfinfo FILE.pdf
+"""
+
+from __future__ import annotations
+import sys
+from pypdf import PdfReader
+
+
+# pdfinfo field labels in conventional order
+FIELDS = [
+    ("/Title",        "Title"),
+    ("/Subject",      "Subject"),
+    ("/Keywords",     "Keywords"),
+    ("/Author",       "Author"),
+    ("/Creator",      "Creator"),
+    ("/Producer",     "Producer"),
+    ("/CreationDate", "CreationDate"),
+    ("/ModDate",      "ModDate"),
+]
+
+
+def main() -> int:
+    if len(sys.argv) < 2:
+        print("usage: pdfinfo FILE.pdf", file=sys.stderr)
+        return 1
+
+    try:
+        reader = PdfReader(sys.argv[1])
+    except Exception as e:
+        print(f"pdfinfo: {e}", file=sys.stderr)
+        return 1
+
+    meta = reader.metadata or {}
+    for pdf_key, label in FIELDS:
+        val = meta.get(pdf_key)
+        if val:
+            print(f"{label:<16}{val}")
+    print(f"{'Pages:':<16}{len(reader.pages)}")
+    if reader.pages:
+        # Page size from first page (matches pdfinfo)
+        try:
+            box = reader.pages[0].mediabox
+            w, h = float(box.width), float(box.height)
+            print(f"{'Page size:':<16}{w:g} x {h:g} pts")
+        except Exception:
+            pass
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

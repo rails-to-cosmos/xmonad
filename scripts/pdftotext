@@ -1,0 +1,48 @@
+#!/usr/bin/env -S uv run --script  # -*- mode: python -*-
+# /// script
+# dependencies = ["pdfminer.six"]
+# ///
+"""
+Self-contained pdftotext via pdfminer.six (pure Python, no system poppler).
+
+Supports the flags used by web2org.d:
+    pdftotext [-layout] INPUT.pdf [OUTPUT.txt]
+    pdftotext INPUT.pdf -      (text to stdout)
+
+NOTE: pdfminer.six's layout extraction is decent but not as polished as
+poppler's. For most academic PDFs (web2org.d's primary use case) it's fine.
+"""
+
+from __future__ import annotations
+import sys
+import argparse
+from pdfminer.high_level import extract_text
+from pdfminer.layout import LAParams
+
+
+def main() -> int:
+    p = argparse.ArgumentParser(description="pdftotext (Python wrapper)")
+    p.add_argument("-layout", action="store_true", dest="layout",
+                   help="maintain original physical layout")
+    p.add_argument("-raw", action="store_true",
+                   help="keep strings in content stream order")
+    p.add_argument("input", help="input PDF file")
+    p.add_argument("output", nargs="?", default="-",
+                   help="output text file (stdout if '-' or omitted)")
+    args = p.parse_args()
+
+    laparams = LAParams() if args.layout else LAParams(detect_vertical=False)
+    text = extract_text(args.input, laparams=laparams)
+
+    if args.output == "-":
+        sys.stdout.write(text)
+    else:
+        # Mirror poppler behavior: if filename is `<base>.pdf`, default output
+        # is `<base>.txt` — but we honor the explicit arg as-is.
+        with open(args.output, "w", encoding="utf-8") as f:
+            f.write(text)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
