@@ -54,7 +54,7 @@ myStartupHook = do
     spawn "~/.config/xmonad/scripts/setup-inputs.sh"
     spawn "~/.config/xmonad/scripts/caps-off.sh"
     spawn "~/.config/xmonad/scripts/audio-fix.sh"
-    spawn "~/.config/xmonad/scripts/build-xmobar-status.sh"
+    spawn "FORCE_REBUILD=1 ~/.config/xmonad/scripts/build-xmobar-status.sh && notify-send -i dialog-information 'xmobar-status' 'Rebuilt successfully' || notify-send -u critical -i dialog-error 'xmobar-status' 'Build failed'"
     -- spawn "sudo -n ~/.config/xmonad/scripts/power-tweaks.sh"
     spawnOnce "dunst"
     spawnOnce "/usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1"

@@ -5,8 +5,10 @@ SRC="$(dirname "$0")/xmobar-status.hs"
 BIN="$(dirname "$0")/xmobar-status"
 OUT="${1:-${XDG_CACHE_HOME:-$HOME/.cache}/xmonad/build-xmobar-status}"
 
-# Only rebuild if source is newer than binary (or binary missing)
-if [ -f "$BIN" ] && [ "$BIN" -nt "$SRC" ]; then
+FORCE="${FORCE_REBUILD:-0}"
+
+# Rebuild if: forced, binary missing, source newer, or linked libs broken
+if [ "$FORCE" != "1" ] && [ -f "$BIN" ] && [ "$BIN" -nt "$SRC" ] && ldd "$BIN" 2>&1 | grep -qv 'not found'; then
     exit 0
 fi
 
