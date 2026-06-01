@@ -50,9 +50,11 @@ myLayout = avoidStruts $ toggleLayouts (noBorders Full) $ smartBorders $ mySpaci
 
 myStartupHook :: X ()
 myStartupHook = do
+    -- spawn "setxkbmap -layout us,ru -option '' -option grp:shifts_toggle"
     spawn "setxkbmap -layout us,ru -option '' -option ctrl:nocaps -option grp:shifts_toggle"
     spawn "~/.config/xmonad/scripts/setup-inputs.sh"
     spawn "~/.config/xmonad/scripts/caps-off.sh"
+    -- spawn "~/.config/xmonad/scripts/kmonad-start.sh"
     spawn "~/.config/xmonad/scripts/audio-fix.sh"
     spawn "FORCE_REBUILD=1 ~/.config/xmonad/scripts/build-xmobar-status.sh && notify-send -i dialog-information 'xmobar-status' 'Rebuilt successfully' || notify-send -u critical -i dialog-error 'xmobar-status' 'Build failed'"
     -- spawn "sudo -n ~/.config/xmonad/scripts/power-tweaks.sh"
@@ -103,6 +105,7 @@ myKeys =
     , ("C-M-q", spawn "xmonad --recompile && xmonad --restart")
     , ("<XF86MonBrightnessDown>", spawn "brightnessctl --class=backlight set 5%-")
     , ("<XF86MonBrightnessUp>", spawn "brightnessctl --class=backlight set +5%")
+    , ("M-S-<Return>", withFocused $ windows . W.sink)
     , ("M-S-g", spawn "~/.config/xmonad/scripts/dgpu-control.sh")
     , ("M-S-r", spawn "~/.config/xmonad/scripts/refresh-rate.sh")
     , ("M-S-p", spawn "~/.config/xmonad/scripts/power-profile.sh")

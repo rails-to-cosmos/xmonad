@@ -29,6 +29,11 @@ sudo pacman -S --needed --noconfirm \
 sudo pacman -S --needed --noconfirm \
     polkit-gnome
 
+# Keyboard remapping (KMonad: Caps→Ctrl/Esc tap-hold, layers, etc.)
+sudo pacman -S --needed --noconfirm \
+    kmonad
+./scripts/setup-kmonad.sh
+
 # Power profile daemon (auto AC/battery profile switching, integrates with desktop)
 sudo pacman -S --needed --noconfirm \
     power-profiles-daemon

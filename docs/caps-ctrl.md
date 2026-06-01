@@ -159,12 +159,64 @@ ls /dev/input/by-id/ | grep -i framework
 
 Each `event-*` is a separate interface. keyd needs to grab the one carrying actual key events (usually `event-kbd` or the lowest-numbered one).
 
+## Current Fix: KMonad (replaces keyd)
+
+KMonad operates at the same evdev level as keyd, but with a critical advantage:
+`tap-hold-next-release` commits to "hold" mode once a second key is pressed,
+and **maintains modifier state regardless of firmware phantom releases**.
+
+### Config location
+
+- `~/.config/kmonad/framework16.kbd` — Framework 16 keyboard (handles firmware bug)
+- `~/.config/kmonad/external.kbd` — template for external keyboards
+
+### How the Caps key is configured
+
+```lisp
+(defalias
+  cap (tap-hold-next-release 200 esc lctl))
+```
+
+- **Quick tap** (< 200ms, no other key) → sends `Escape`
+- **Hold + another key** → `Ctrl` modifier (stable, no phantom releases)
+
+### Launcher
+
+`~/.config/xmonad/scripts/kmonad-start.sh` runs on every xmonad restart:
+- Kills existing KMonad instances
+- Detects Framework 16 keyboard → uses `framework16.kbd`
+- Detects other keyboards → injects device path into `external.kbd`
+- Runs KMonad in background for each
+
+### Setup (one-time)
+
+```bash
+~/.config/xmonad/scripts/setup-kmonad.sh
+# Installs kmonad, creates uinput group, sets permissions, loads module
+# Requires logout/login for group changes
+```
+
+### xmonad integration
+
+xmonad.hs startup hook:
+```haskell
+spawn "setxkbmap -layout us,ru -option '' -option grp:shifts_toggle"  -- NO ctrl:nocaps
+spawn "~/.config/xmonad/scripts/kmonad-start.sh"                      -- KMonad handles Caps
+```
+
+KMonad's uinput-sink re-applies `setxkbmap` settings to the virtual keyboard.
+
 ## Why Not udev hwdb?
 
-We tried `KEYBOARD_KEY_70039=leftctrl` in `/etc/udev/hwdb.d/10-framework-keyboard.hwdb`. The compiled hwdb didn't include the rule (verified via `strings /etc/udev/hwdb.bin`). The Framework 16 keyboard's modalias might use AT-style scancodes rather than HID, requiring a different rule format. keyd avoids this by working with evdev keycodes directly.
+We tried `KEYBOARD_KEY_70039=leftctrl` in `/etc/udev/hwdb.d/10-framework-keyboard.hwdb`. The compiled hwdb didn't include the rule (verified via `strings /etc/udev/hwdb.bin`). The Framework 16 keyboard's modalias might use AT-style scancodes rather than HID, requiring a different rule format.
+
+## Why Not keyd?
+
+keyd's simple `capslock = leftcontrol` remap doesn't solve the firmware phantom release bug — it passes through the rapid press/release cycles from the firmware without debouncing. KMonad's `tap-hold-next-release` is specifically designed for this scenario.
 
 ## References
 
-- [keyd GitHub](https://github.com/rvaiya/keyd)
-- [Framework Laptop 16 ArchWiki - Keyboard section](https://wiki.archlinux.org/title/Framework_Laptop_16)
+- [KMonad GitHub](https://github.com/kmonad/kmonad)
+- [KMonad tutorial](https://github.com/kmonad/kmonad/blob/master/keymap/tutorial.kbd)
+- [Framework Laptop 16 ArchWiki](https://wiki.archlinux.org/title/Framework_Laptop_16)
 - Linux input layer docs: `/sys/kernel/debug/input/`

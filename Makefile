@@ -1,4 +1,9 @@
-.PHONY: install reload restart recompile build-scripts clean
+.PHONY: install reload restart recompile build-scripts emacs-config clean
+
+# Regenerate ~/.emacs.d/generated.el from the Haskell DSL (emacs-config.hs)
+emacs-config:
+	runghc $(HOME)/.emacs.d/emacs-config.hs > $(HOME)/.emacs.d/generated.el
+	@echo "Generated ~/.emacs.d/generated.el — reload Emacs or eval the file to apply"
 
 install:
 	./scripts/install.sh
