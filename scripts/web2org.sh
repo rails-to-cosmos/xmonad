@@ -33,11 +33,35 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# WEB_CAPTURE_TERM=1 : re-exec inside a floating, --hold terminal so all output
+# (incl. crash traces) is visible live and stays on screen after exit.
+if [[ "${WEB_CAPTURE_TERM:-0}" == 1 && -z "${WEB_CAPTURE_IN_TERM:-}" ]]; then
+    exec alacritty --class web2org-term --hold \
+        -e env WEB_CAPTURE_IN_TERM=1 "$0" "$@"
+fi
+
 # Expose sibling uv-script tools (yt-dlp, jq, xmllint, pdftotext, pdfinfo) to handlers
 export PATH="$SCRIPT_DIR:$PATH"
 HANDLER_DIR="$SCRIPT_DIR/web2org.d"
 . "$HANDLER_DIR/config.sh"
 . "$HANDLER_DIR/lib.sh"
+
+# Tee everything to a timestamped log (+ stable "last" symlink) so a quiet
+# spawn from xmonad still leaves a full trace to inspect after a failure.
+LOG="/tmp/web2org-$(date +%Y%m%d-%H%M%S).log"
+ln -sf "$LOG" /tmp/web2org-last.log
+exec > >(tee -a "$LOG") 2>&1
+
+# WEB_CAPTURE_DEBUG=1 : add a full shell execution trace to the log.
+[[ "${WEB_CAPTURE_DEBUG:-0}" == 1 ]] && set -x
+
+# Pop the log in a floating terminal (only from a GUI, and not if we're already
+# running inside the verbose terminal where the trace is already on screen).
+# open_trace() {
+#     [[ -n "${DISPLAY:-}" && -z "${WEB_CAPTURE_IN_TERM:-}" ]] || return 0
+#     alacritty --class web2org-term --hold -e less +G "$LOG" >/dev/null 2>&1 &
+# }
 
 url="${1:-}"
 if [[ -z "$url" ]]; then
@@ -50,11 +74,14 @@ if [[ -z "${url:-}" ]]; then
     exit 1
 fi
 
+# Instant feedback the moment the keybind fires.
+progress "Working… ($url)"
+
 for h in "$HANDLER_DIR"/[0-9][0-9]-*.sh; do
     [[ -x "$h" ]] || continue
     if "$h" match "$url" 2>/dev/null; then
         if ! "$h" capture "$url"; then
-            notify -u critical "Handler $(basename "$h") failed for $url"
+            notify -u critical "$(basename "$h") failed"
             exit 1
         fi
         exit 0

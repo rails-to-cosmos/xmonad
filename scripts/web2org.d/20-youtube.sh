@@ -22,7 +22,7 @@ capture)
     tmpdir="$(mktemp -d)"
     trap 'rm -rf "$tmpdir"' EXIT
 
-    notify "Fetching YouTube metadata"
+    progress -p 10 "YouTube — fetching metadata"
 
     meta="$tmpdir/meta.json"
     yt-dlp --skip-download --dump-json --no-warnings "$url" > "$meta" 2>/dev/null \
@@ -39,7 +39,7 @@ capture)
     [[ -z "$slug" ]] && slug="yt-$video_id"
     out="$WEB_CAPTURE_VIDEOS_DIR/${slug}.org"
 
-    notify "Trying auto-subs"
+    progress -p 35 "Trying auto-subs"
     subs_text=""
     subs_source="none"
     yt-dlp --skip-download \
@@ -52,11 +52,12 @@ capture)
         subs_text="$(vtt_to_text "$sub_vtt")"
         subs_source="youtube-auto"
     elif command -v whisper >/dev/null 2>&1; then
-        notify "No subs found, running whisper (slow)"
+        progress -p 50 "No subs — downloading audio"
         audio_base="$tmpdir/audio"
         if yt-dlp -x --audio-format m4a -o "${audio_base}.%(ext)s" "$url" >/dev/null 2>&1; then
             audio_file="$(find "$tmpdir" -maxdepth 1 -name 'audio.*' | head -1)"
             if [[ -n "$audio_file" ]]; then
+                progress -p 70 "Transcribing with whisper (${WHISPER_MODEL:-small}, slow)…"
                 whisper "$audio_file" --model "${WHISPER_MODEL:-small}" \
                         --output_format txt --output_dir "$tmpdir" >/dev/null 2>&1 || true
                 wtxt="$(find "$tmpdir" -maxdepth 1 -name 'audio*.txt' | head -1)"
@@ -87,6 +88,7 @@ capture)
         fi
     } > "$out"
 
+    progress -p 95 "Writing org file"
     finalize "$out"
     ;;
 *)

@@ -1,13 +1,27 @@
 # Helpers shared by web-capture handlers. Source this; don't execute.
 
 # notify [-u urgency] MESSAGE...
+# Info-level messages share a dunst stack tag so they UPDATE IN PLACE (one
+# walking bubble: "Fetching…" -> "Transcribing…" -> "Saved X"). Critical
+# errors are NOT tagged, so they pop as separate, persistent bubbles.
 notify() {
+    local urg="normal"
+    local tag=(-h string:x-dunst-stack-tag:web2org)
     if [[ "${1:-}" == "-u" ]]; then
-        local urg="$2"; shift 2
-        notify-send -u "$urg" 'web-capture' "$*" 2>/dev/null || true
-    else
-        notify-send 'web-capture' "$*" 2>/dev/null || true
+        urg="$2"; shift 2
+        [[ "$urg" == "critical" ]] && tag=()
     fi
+    notify-send -a web-capture -u "$urg" "${tag[@]}" 'web-capture' "$*" 2>/dev/null || true
+}
+
+# progress [-p PERCENT] MESSAGE...
+# Like notify (info, in-place) but draws a dunst progress bar when -p is given.
+progress() {
+    local val=()
+    if [[ "${1:-}" == "-p" ]]; then val=(-h "int:value:$2"); shift 2; fi
+    notify-send -a web-capture -u normal \
+        -h string:x-dunst-stack-tag:web2org "${val[@]}" \
+        'web-capture' "$*" 2>/dev/null || true
 }
 
 # Lowercase ASCII slug, max 80 chars.

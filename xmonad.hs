@@ -62,7 +62,7 @@ myStartupHook = do
     spawnOnce "/usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1"
     -- spawnOnce "stalonetray --geometry 5x1+0+0 --icon-size 20 --slot-size 24 --bg '#000000' --icon-gravity NE --kludges force_icons_size -d none --window-strut top"
     spawnOnce "redshift -l 52.37:4.90"
-    spawn "emacsclient -e '(kill-emacs)' 2>/dev/null; echo 'starting' > /tmp/emacs-status; emacs --daemon && echo 'ready' > /tmp/emacs-status || echo 'error' > /tmp/emacs-status"
+    spawnOnce "emacsclient -e '(kill-emacs)' 2>/dev/null; echo 'starting' > /tmp/emacs-status; emacs --daemon && echo 'ready' > /tmp/emacs-status || echo 'error' > /tmp/emacs-status"
 
 myScratchpads :: [NamedScratchpad]
 myScratchpads =
@@ -80,6 +80,7 @@ myManageHook =
     composeAll
         [ className =? "Gimp" --> doFloat
         , className =? "MPlayer" --> doFloat
+        , className =? "web2org-term" --> customFloating (W.RationalRect 0.15 0.15 0.7 0.7)
         ]
         <+> namedScratchpadManageHook myScratchpads
 
@@ -110,6 +111,7 @@ myKeys =
     , ("M-S-r", spawn "~/.config/xmonad/scripts/refresh-rate.sh")
     , ("M-S-p", spawn "~/.config/xmonad/scripts/power-profile.sh")
     , ("M-o", spawn "~/.config/xmonad/scripts/web2org.sh")
+    , ("M-S-o", spawn "WEB_CAPTURE_TERM=1 ~/.config/xmonad/scripts/web2org.sh")
     , ("M-<Escape>", spawn $ "echo -e 'Lock\nLogout\nSuspend\nReboot\nShutdown' | rofi -dmenu -p 'Power' " ++ rofiFlags ++ " | xargs -I{} sh -c 'case {} in Lock) loginctl lock-session;; Logout) xmonad --restart && killall xmonad;; Suspend) systemctl suspend;; Reboot) systemctl reboot;; Shutdown) systemctl poweroff;; esac'")
     ]
 
