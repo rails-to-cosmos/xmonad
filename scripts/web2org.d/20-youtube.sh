@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # YouTube handler: title/description/metadata via yt-dlp, transcript via
 # auto-subs when available, falling back to whisper if installed.
+# Downloads the video itself next to the org file:
+#   $WEB_CAPTURE_VIDEOS_DIR/{channel-slug}/{video-slug}.org
+#   $WEB_CAPTURE_VIDEOS_DIR/{channel-slug}/{video-slug}.mp4
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/config.sh"
@@ -18,7 +21,6 @@ capture)
     command -v yt-dlp >/dev/null 2>&1 || { notify -u critical "yt-dlp not installed"; exit 1; }
     command -v jq      >/dev/null 2>&1 || { notify -u critical "jq not installed"; exit 1; }
 
-    mkdir -p "$WEB_CAPTURE_VIDEOS_DIR"
     tmpdir="$(mktemp -d)"
     trap 'rm -rf "$tmpdir"' EXIT
 
@@ -37,9 +39,23 @@ capture)
 
     slug="$(slugify "$title")"
     [[ -z "$slug" ]] && slug="yt-$video_id"
-    out="$WEB_CAPTURE_VIDEOS_DIR/${slug}.org"
+    channel_slug="$(slugify "$channel")"
+    [[ -z "$channel_slug" ]] && channel_slug="unknown-channel"
 
-    progress -p 35 "Trying auto-subs"
+    outdir="$WEB_CAPTURE_VIDEOS_DIR/$channel_slug"
+    mkdir -p "$outdir"
+    out="$outdir/${slug}.org"
+    video_file="$outdir/${slug}.mp4"
+
+    progress -p 25 "Downloading video"
+    if ! yt-dlp -f 'bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/b' \
+                --merge-output-format mp4 --no-warnings \
+                -o "$video_file" "$url" >/dev/null 2>&1; then
+        notify -u critical "video download failed for $url (continuing with org only)"
+        video_file=""
+    fi
+
+    progress -p 55 "Trying auto-subs"
     subs_text=""
     subs_source="none"
     yt-dlp --skip-download \
@@ -52,19 +68,22 @@ capture)
         subs_text="$(vtt_to_text "$sub_vtt")"
         subs_source="youtube-auto"
     elif command -v whisper >/dev/null 2>&1; then
-        progress -p 50 "No subs — downloading audio"
-        audio_base="$tmpdir/audio"
-        if yt-dlp -x --audio-format m4a -o "${audio_base}.%(ext)s" "$url" >/dev/null 2>&1; then
-            audio_file="$(find "$tmpdir" -maxdepth 1 -name 'audio.*' | head -1)"
-            if [[ -n "$audio_file" ]]; then
-                progress -p 70 "Transcribing with whisper (${WHISPER_MODEL:-small}, slow)…"
-                whisper "$audio_file" --model "${WHISPER_MODEL:-small}" \
-                        --output_format txt --output_dir "$tmpdir" >/dev/null 2>&1 || true
-                wtxt="$(find "$tmpdir" -maxdepth 1 -name 'audio*.txt' | head -1)"
-                if [[ -n "$wtxt" && -s "$wtxt" ]]; then
-                    subs_text="$(cat "$wtxt")"
-                    subs_source="whisper"
-                fi
+        # Prefer the already-downloaded video as the transcription source;
+        # only fetch an audio-only stream if the video download failed.
+        audio_src="$video_file"
+        if [[ -z "$audio_src" || ! -s "$audio_src" ]]; then
+            progress -p 60 "No subs — downloading audio"
+            yt-dlp -x --audio-format m4a -o "$tmpdir/audio.%(ext)s" "$url" >/dev/null 2>&1 || true
+            audio_src="$(find "$tmpdir" -maxdepth 1 -name 'audio.*' | head -1)"
+        fi
+        if [[ -n "$audio_src" && -s "$audio_src" ]]; then
+            progress -p 70 "Transcribing with whisper (${WHISPER_MODEL:-small}, slow)…"
+            whisper "$audio_src" --model "${WHISPER_MODEL:-small}" \
+                    --output_format txt --output_dir "$tmpdir" >/dev/null 2>&1 || true
+            wtxt="$(find "$tmpdir" -maxdepth 1 -name '*.txt' | head -1)"
+            if [[ -n "$wtxt" && -s "$wtxt" ]]; then
+                subs_text="$(cat "$wtxt")"
+                subs_source="whisper"
             fi
         fi
     fi
@@ -73,6 +92,7 @@ capture)
         printf '#+TITLE: %s\n' "$title"
         [[ -n "$channel"      ]] && printf '#+CHANNEL: %s\n' "$channel"
         printf '#+SOURCE: %s\n' "$url"
+        [[ -n "$video_file"   ]] && printf '#+VIDEO: [[file:%s.mp4]]\n' "$slug"
         [[ -n "$upload_date"  ]] && printf '#+UPLOAD_DATE: %s\n' "$upload_date"
         [[ -n "$duration"     ]] && printf '#+DURATION: %s\n' "$duration"
         printf '#+DATE: %s\n' "$(date -I)"
