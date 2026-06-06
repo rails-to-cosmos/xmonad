@@ -91,6 +91,8 @@ myKeys =
     , ("M-f", sendMessage ToggleStruts)
     , ("M-t", sendMessage NextLayout)
     , ("M-<Space>", spawn $ "rofi -show combi -combi-modes 'window,drun,run' " ++ rofiFlags)
+    -- Moonlander: tap of the Ctrl+Alt thumb key sends F13 -> launcher
+    , ("<F13>", spawn $ "rofi -show combi -combi-modes 'window,drun,run' " ++ rofiFlags)
     , ("M-S-<Space>", spawn $ "rofi -show combi -combi-modes 'drun,run' -run-command 'env DRI_PRIME=1 {cmd}' -drun-command 'env DRI_PRIME=1 {exec}' " ++ rofiFlags)
     , ("M-S-t", namedScratchpadAction myScratchpads "terminal")
     , ("M-s", namedScratchpadAction myScratchpads "btop")
@@ -99,6 +101,8 @@ myKeys =
     , ("M-S-v", spawn "sh -c 'if lsmod | grep -q uvcvideo; then sudo modprobe -r uvcvideo; else sudo modprobe uvcvideo; fi'")
     , ("M-S-k", prevWS)
     , ("M-S-j", nextWS)
+    , ("M-h", prevWS)
+    , ("M-l", nextWS)
     , ("C-M-<Left>", prevWS)
     , ("C-M-<Right>", nextWS)
     , ("C-M-S-<Left>", shiftToPrev >> prevWS)
