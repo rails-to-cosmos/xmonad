@@ -12,6 +12,8 @@ import Data.Word (Word8, Word32)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC
 import qualified Data.Map.Strict as Map
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as TE
 import System.Directory (listDirectory, doesFileExist, doesDirectoryExist, removeFile)
 import System.Environment (getArgs)
 import System.FilePath ((</>))
@@ -296,7 +298,10 @@ queryNMWifi = do
             Just ap -> do
               mSsid <- getProp client ap "org.freedesktop.NetworkManager.AccessPoint" "Ssid"
               mStr  <- getProp client ap "org.freedesktop.NetworkManager.AccessPoint" "Strength"
-              let ssid = maybe "" BSC.unpack (mSsid >>= DBus.fromVariant :: Maybe BS.ByteString)
+              -- NM returns the SSID as a raw UTF-8 byte array; decode it as
+              -- UTF-8 (not Latin-1, which would mojibake non-ASCII chars like
+              -- the U+2019 apostrophe in "Dmitry's iPhone").
+              let ssid = maybe "" (T.unpack . TE.decodeUtf8Lenient) (mSsid >>= DBus.fromVariant :: Maybe BS.ByteString)
                   strg = maybe 0  id          (mStr  >>= DBus.fromVariant :: Maybe Word8)
               return $ Just (NMWifi iface ssid strg)
 
