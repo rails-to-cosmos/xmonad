@@ -575,6 +575,20 @@ power t = do
         _ -> putStr $ "+" ++ fc (tGood t) (show wInt ++ "." ++ show wDec) ++ "W"
     _ -> return ()
 
+-- ACPI platform power profile (the lever toggled by M-S-p). Icon-only:
+-- leaf = low-power, scale = balanced, bolt = performance.
+powerprofile :: Theme -> IO ()
+powerprofile t = do
+  p <- trim <$> readFileSafe "/sys/firmware/acpi/platform_profile"
+  let (glyph, color) = case p of
+        "low-power"   -> ("\xF06C", tGood t)    -- nf-fa-leaf
+        "quiet"       -> ("\xF06C", tGood t)
+        "cool"        -> ("\xF06C", tGood t)
+        "balanced"    -> ("\xF24E", tAccent t)  -- nf-fa-balance_scale
+        "performance" -> ("\xF0E7", tErr t)     -- nf-fa-bolt
+        _             -> ("\xF013", tMid t)     -- nf-fa-cog (unknown)
+  if null p then return () else putStr (icon color glyph)
+
 disk :: Theme -> IO ()
 disk t = do
   df <- readProcess "df" ["-h", "/"] ""
@@ -633,6 +647,7 @@ main = do
     ["emacs"]      -> emacs t
     ["gpu"]        -> gpu t
     ["power"]      -> power t
+    ["powerprofile"] -> powerprofile t
     ["disk"]       -> disk t
     ["tray"]       -> tray t
-    _              -> putStrLn "Usage: xmobar-status {battery|brightness|camera|cputemp|disk|volume|wifi|vpn|emacs|gpu|power}"
+    _              -> putStrLn "Usage: xmobar-status {battery|brightness|camera|cputemp|disk|volume|wifi|vpn|emacs|gpu|power|powerprofile}"

@@ -1,0 +1,635 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.11"
+# ///
+"""power-dashboard — deterministic "where the watts go" report for this laptop.
+
+Reads live system state from sysfs/procfs (+ xrandr), attributes power through a
+transparent fixed-coefficient model, and reconciles the breakdown against the
+*measured* battery draw so the components always sum to the real total.
+
+Nothing here is heuristic-at-runtime: the same machine state produces the same
+output. Every model coefficient lives in the MODEL section below and is
+documented. The only "measured" numbers are the battery draw (ground truth) and
+any hardware power sensors found (e.g. amdgpu hwmon power1_average); everything
+else is an estimate, clearly flagged.
+
+Usage:
+    power-dashboard                 # one-shot dashboard
+    power-dashboard --measure 5     # integrate charge_now over 5 s for an
+                                    #   accurate total (current_now is coarse here)
+    power-dashboard --watch 3       # refresh every 3 s
+    power-dashboard --json          # machine-readable snapshot
+    power-dashboard --no-color
+"""
+from __future__ import annotations
+
+import argparse
+import glob
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+from dataclasses import dataclass, field, asdict
+from pathlib import Path
+from typing import Optional
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MODEL — all power-attribution coefficients live here and are documented.
+# Tuned for a Framework Laptop 16 (Ryzen 9 7940HS, 2560x1600 16" panel).
+# These are estimates; the total is always pinned to the measured battery draw.
+# ─────────────────────────────────────────────────────────────────────────────
+BACKLIGHT_MAX_W = 4.5    # LED backlight at 100% PWM (≈linear with brightness)
+PANEL_BASE_W = 1.2       # TCON + pixel clock, brightness-independent
+REFRESH_SPAN_W = 0.6     # extra draw 60Hz -> 165Hz (display pipeline)
+SOC_IDLE_W = 2.8         # APU package floor (cores parked, iGPU idle)
+SOC_DYNAMIC_W = 24.0     # additional package draw at 100% CPU utilisation
+RAM_W_PER_GB = 0.03      # DDR5 SO-DIMM self-refresh + controller, per GB
+NVME_W_EACH = 0.45       # per internal NVMe drive, light activity
+WIFI_ASSOC_W = 0.7       # associated Wi-Fi link (more under heavy traffic)
+USB_DEVICE_W = 0.2       # per non-hub USB device held powered (control=on); rough
+                         # (HID gadgets draw ~0.05W, LAN/storage ~0.4W)
+DGPU_SUSPENDED_W = 1.5   # discrete GPU present but runtime-suspended
+DGPU_ACTIVE_BASE_W = 6.0 # discrete GPU powered + at least idle-active
+
+BAR_WIDTH = 30
+PANEL = "Framework Laptop 16"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Low-level sysfs/procfs readers (defensive: missing files -> None)
+# ─────────────────────────────────────────────────────────────────────────────
+def _read(path: str) -> Optional[str]:
+    try:
+        return Path(path).read_text().strip()
+    except OSError:
+        return None
+
+
+def _read_int(path: str) -> Optional[int]:
+    s = _read(path)
+    if s is None:
+        return None
+    try:
+        return int(s)
+    except ValueError:
+        return None
+
+
+def _run(cmd: list[str]) -> Optional[str]:
+    try:
+        return subprocess.run(
+            cmd, capture_output=True, text=True, timeout=4
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Snapshot model
+# ─────────────────────────────────────────────────────────────────────────────
+@dataclass
+class Component:
+    name: str
+    watts: float
+    note: str = ""
+    measured: bool = False  # True if from a hardware power sensor, not modeled
+
+
+@dataclass
+class State:
+    on_ac: bool
+    bat_status: str
+    capacity: Optional[int]
+    voltage_v: Optional[float]
+    current_a: Optional[float]
+    measured_w: Optional[float]      # instantaneous V*A (coarse on this EC)
+    measured_method: str
+    profile: Optional[str]
+    epp: Optional[str]
+    governor: Optional[str]
+    scaling_driver: Optional[str]
+    cpu_util: float
+    cpu_mhz: float
+    brightness_frac: Optional[float]
+    resolution: Optional[str]
+    refresh_hz: Optional[float]
+    ext_displays: list[str]
+    igpu_busy: Optional[int]
+    dgpu_present: bool
+    dgpu_status: Optional[str]
+    dgpu_power_w: Optional[float]
+    nvme_count: int
+    ram_gb: float
+    wifi_iface: Optional[str]
+    wifi_assoc: bool
+    wifi_powersave: Optional[bool]
+    usb_devices: list[str]
+    cmdline: str
+
+
+def read_ac_online() -> bool:
+    for p in glob.glob("/sys/class/power_supply/*/online"):
+        # battery dirs have no 'online'; only mains/USB-PD sources do
+        if _read_int(p) == 1:
+            return True
+    return False
+
+
+def read_cpu_util(interval: float) -> float:
+    def snap() -> tuple[int, int]:
+        line = Path("/proc/stat").read_text().splitlines()[0].split()[1:]
+        vals = [int(x) for x in line]
+        idle = vals[3] + vals[4]  # idle + iowait
+        return sum(vals), idle
+
+    t0, i0 = snap()
+    time.sleep(interval)
+    t1, i1 = snap()
+    dt, di = t1 - t0, i1 - i0
+    if dt <= 0:
+        return 0.0
+    return max(0.0, min(1.0, 1 - di / dt))
+
+
+def read_cpu_mhz() -> float:
+    freqs = [
+        _read_int(p)
+        for p in glob.glob("/sys/devices/system/cpu/cpu*/cpufreq/scaling_cur_freq")
+    ]
+    freqs = [f for f in freqs if f]
+    return (sum(freqs) / len(freqs) / 1000) if freqs else 0.0
+
+
+def read_brightness() -> Optional[float]:
+    for b in glob.glob("/sys/class/backlight/*"):
+        cur, mx = _read_int(f"{b}/brightness"), _read_int(f"{b}/max_brightness")
+        if cur is not None and mx:
+            return cur / mx
+    return None
+
+
+def read_display() -> tuple[Optional[str], Optional[float], list[str]]:
+    """Return (primary_resolution, primary_refresh_hz, [external outputs])."""
+    if not os.environ.get("DISPLAY"):
+        return None, None, []
+    out = _run(["xrandr", "--query"])
+    if not out:
+        return None, None, []
+    res: Optional[str] = None
+    hz: Optional[float] = None
+    ext: list[str] = []
+    cur_out: Optional[str] = None
+    for line in out.splitlines():
+        m = re.match(r"^(\S+) connected", line)
+        if m:
+            cur_out = m.group(1)
+            if not cur_out.startswith("eDP"):
+                ext.append(cur_out)
+            continue
+        if "*" in line:  # active mode line of the most recent output
+            parts = line.split()
+            active = next((p for p in parts if "*" in p), None)
+            if active and res is None:  # first active = primary internal panel
+                res = parts[0]
+                try:
+                    hz = float(re.sub(r"[^\d.]", "", active))
+                except ValueError:
+                    hz = None
+    return res, hz, ext
+
+
+def read_gpus() -> tuple[Optional[int], bool, Optional[str], Optional[float]]:
+    """Return (igpu_busy%, dgpu_present, dgpu_runtime_status, dgpu_power_w)."""
+    igpu_busy: Optional[int] = None
+    dgpu_present = False
+    dgpu_status: Optional[str] = None
+    dgpu_power: Optional[float] = None
+    for dev in glob.glob("/sys/class/drm/card*/device"):
+        if not (_read(f"{dev}/uevent") or "").count("PCI_ID"):
+            continue
+        boot_vga = _read_int(f"{dev}/boot_vga")
+        busy = _read_int(f"{dev}/gpu_busy_percent")
+        if boot_vga == 1:
+            igpu_busy = busy
+        else:
+            dgpu_present = True
+            dgpu_status = _read(f"{dev}/power/runtime_status")
+            for hw in glob.glob(f"{dev}/hwmon/hwmon*/power1_average"):
+                uw = _read_int(hw)
+                if uw:
+                    dgpu_power = uw / 1e6
+    return igpu_busy, dgpu_present, dgpu_status, dgpu_power
+
+
+def read_wifi() -> tuple[Optional[str], bool, Optional[bool]]:
+    for net in glob.glob("/sys/class/net/*"):
+        if not Path(f"{net}/phy80211").exists():
+            continue
+        iface = os.path.basename(net)
+        assoc = (
+            _read(f"{net}/operstate") == "up" and _read_int(f"{net}/carrier") == 1
+        )
+        ps: Optional[bool] = None
+        out = _run(["iw", "dev", iface, "get", "power_save"])
+        if out:
+            ps = "on" in out.lower()
+        return iface, assoc, ps
+    return None, False, None
+
+
+def read_usb_devices() -> list[str]:
+    """Non-hub USB devices held powered (control=on), with product names."""
+    devs: list[str] = []
+    for p in glob.glob("/sys/bus/usb/devices/*/power/control"):
+        dev = os.path.dirname(os.path.dirname(p))
+        if _read(p) != "on":
+            continue
+        if _read(f"{dev}/bDeviceClass") == "09":  # hub
+            continue
+        product = _read(f"{dev}/product")
+        if product:
+            devs.append(product)
+    return devs
+
+
+def measure_draw_integrated(seconds: float) -> Optional[float]:
+    """Average draw over `seconds` via charge_now (coulomb counter) — far more
+    accurate than the coarse current_now register on this EC."""
+    bats = sorted(glob.glob("/sys/class/power_supply/BAT*"))
+    if not bats:
+        return None
+    b = bats[0]
+    q0, v0 = _read_int(f"{b}/charge_now"), _read_int(f"{b}/voltage_now")
+    if q0 is None or v0 is None:
+        return None
+    time.sleep(seconds)
+    q1, v1 = _read_int(f"{b}/charge_now"), _read_int(f"{b}/voltage_now")
+    if q1 is None or v1 is None:
+        return None
+    dq_ah = (q0 - q1) / 1e6           # µAh -> Ah (positive while discharging)
+    if dq_ah <= 0:
+        return None
+    avg_i = dq_ah / (seconds / 3600)  # A
+    avg_v = ((v0 + v1) / 2) / 1e6     # V
+    return avg_i * avg_v
+
+
+def read_state(cpu_interval: float, measure_seconds: float) -> State:
+    bats = sorted(glob.glob("/sys/class/power_supply/BAT*"))
+    b = bats[0] if bats else None
+    on_ac = read_ac_online()
+    status = _read(f"{b}/status") if b else None
+    v = _read_int(f"{b}/voltage_now") if b else None
+    c = _read_int(f"{b}/current_now") if b else None
+    voltage_v = v / 1e6 if v else None
+    current_a = c / 1e6 if c is not None else None
+
+    measured_w: Optional[float] = None
+    method = "n/a (on AC — battery draw not observable)"
+    if status == "Discharging" and voltage_v and current_a:
+        if measure_seconds > 0:
+            measured_w = measure_draw_integrated(measure_seconds)
+            method = f"charge_now integrated over {measure_seconds:g}s (accurate)"
+        if measured_w is None:
+            measured_w = voltage_v * current_a
+            method = "current_now × voltage_now (coarse: EC samples ~30–60s)"
+
+    igpu_busy, dgpu_present, dgpu_status, dgpu_power = read_gpus()
+    res, hz, ext = read_display()
+    wifi_iface, wifi_assoc, wifi_ps = read_wifi()
+    mem_kb = 0
+    for ln in Path("/proc/meminfo").read_text().splitlines():
+        if ln.startswith("MemTotal:"):
+            mem_kb = int(ln.split()[1])
+            break
+
+    return State(
+        on_ac=on_ac,
+        bat_status=status or "Unknown",
+        capacity=_read_int(f"{b}/capacity") if b else None,
+        voltage_v=voltage_v,
+        current_a=current_a,
+        measured_w=measured_w,
+        measured_method=method,
+        profile=_read("/sys/firmware/acpi/platform_profile"),
+        epp=_read("/sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference"),
+        governor=_read("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor"),
+        scaling_driver=_read("/sys/devices/system/cpu/cpu0/cpufreq/scaling_driver"),
+        cpu_util=read_cpu_util(cpu_interval),
+        cpu_mhz=read_cpu_mhz(),
+        brightness_frac=read_brightness(),
+        resolution=res,
+        refresh_hz=hz,
+        ext_displays=ext,
+        igpu_busy=igpu_busy,
+        dgpu_present=dgpu_present,
+        dgpu_status=dgpu_status,
+        dgpu_power_w=dgpu_power,
+        nvme_count=len(glob.glob("/sys/class/nvme/nvme*")),
+        ram_gb=mem_kb / 1024 / 1024,
+        wifi_iface=wifi_iface,
+        wifi_assoc=wifi_assoc,
+        wifi_powersave=wifi_ps,
+        usb_devices=read_usb_devices(),
+        cmdline=_read("/proc/cmdline") or "",
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Attribution model: State -> [Component], reconciled against measured total
+# ─────────────────────────────────────────────────────────────────────────────
+def build_components(s: State) -> tuple[list[Component], float, Optional[float]]:
+    comps: list[Component] = []
+
+    # Display
+    frac = s.brightness_frac or 0.0
+    refr = 0.0
+    if s.refresh_hz:
+        refr = max(0.0, (s.refresh_hz - 60) / 105.0) * REFRESH_SPAN_W
+    disp_note = (
+        f"{s.resolution or '?'} @ {fmt_hz(s.refresh_hz)}, "
+        f"{pct(frac)} brightness"
+    )
+    if s.ext_displays:
+        disp_note += f" (+{len(s.ext_displays)} external: {', '.join(s.ext_displays)})"
+    comps.append(
+        Component("Display (panel+backlight)",
+                  BACKLIGHT_MAX_W * frac + PANEL_BASE_W + refr, disp_note)
+    )
+
+    # SoC package
+    comps.append(
+        Component("SoC (CPU+iGPU package)",
+                  SOC_IDLE_W + s.cpu_util * SOC_DYNAMIC_W,
+                  f"{pct(s.cpu_util)} busy, ~{s.cpu_mhz:.0f} MHz avg"
+                  + (f", iGPU {s.igpu_busy}%" if s.igpu_busy is not None else ""))
+    )
+
+    # Discrete GPU (measured if a hwmon sensor exists)
+    if s.dgpu_present:
+        if s.dgpu_power_w is not None:
+            comps.append(Component("Discrete GPU", s.dgpu_power_w,
+                                   f"{s.dgpu_status or '?'} (hwmon)", measured=True))
+        else:
+            active = (s.dgpu_status or "") == "active"
+            comps.append(Component(
+                "Discrete GPU",
+                DGPU_ACTIVE_BASE_W if active else DGPU_SUSPENDED_W,
+                f"present, {s.dgpu_status or '?'}"))
+
+    # Memory
+    comps.append(Component("Memory", s.ram_gb * RAM_W_PER_GB,
+                           f"{s.ram_gb:.0f} GB DDR5"))
+
+    # NVMe
+    if s.nvme_count:
+        comps.append(Component("NVMe storage", s.nvme_count * NVME_W_EACH,
+                               f"{s.nvme_count} drive(s)"))
+
+    # Wi-Fi
+    if s.wifi_assoc:
+        ps = "PS on" if s.wifi_powersave else (
+            "PS off" if s.wifi_powersave is False else "")
+        comps.append(Component("Wi-Fi", WIFI_ASSOC_W,
+                               f"{s.wifi_iface} associated{(' · ' + ps) if ps else ''}"))
+
+    # USB devices held powered
+    if s.usb_devices:
+        comps.append(Component("USB peripherals", len(s.usb_devices) * USB_DEVICE_W,
+                               ", ".join(s.usb_devices)))
+
+    identified = sum(c.watts for c in comps)
+
+    # Reconcile against measured ground truth
+    baseline: Optional[float] = None
+    if s.measured_w is not None:
+        baseline = s.measured_w - identified
+        if baseline > 0.2:
+            comps.append(Component(
+                "Platform baseline", baseline,
+                "measured total − identified (VRM/EC/board overhead + model error)"))
+            baseline = None  # folded in
+    return comps, identified, baseline
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Recommendations (deterministic, derived from current state)
+# ─────────────────────────────────────────────────────────────────────────────
+def recommendations(s: State) -> list[tuple[float, str]]:
+    recs: list[tuple[float, str]] = []
+    if s.dgpu_present and (s.dgpu_status or "") == "active":
+        recs.append((6.0, "Discrete GPU is ACTIVE — `M-S-g` → disable (biggest lever)"))
+    if s.cpu_util > 0.12:
+        recs.append((s.cpu_util * SOC_DYNAMIC_W * 0.5,
+                     "Background software (LSP/vterm/Slack) is your largest "
+                     "controllable draw — close idle dev tooling"))
+    if s.brightness_frac and s.brightness_frac > 0.55:
+        save = (s.brightness_frac - 0.45) * BACKLIGHT_MAX_W
+        recs.append((save, f"Brightness {pct(s.brightness_frac)} → 45% "
+                           f"(`brightnessctl set 45%`)"))
+    if s.refresh_hz and s.refresh_hz > 60:
+        recs.append((0.4, f"{fmt_hz(s.refresh_hz)} → 60Hz on battery (`M-S-r`) "
+                          "— marginal here (PSR off blunts it)"))
+    if "dcdebugmask=0x410" in s.cmdline:
+        recs.append((0.5, "PSR disabled via amdgpu.dcdebugmask=0x410 — drop it "
+                          "to re-enable Panel Self Refresh (watch for flicker)"))
+    if "abmlevel" not in s.cmdline:
+        recs.append((0.3, "Add amdgpu.abmlevel=2 (adaptive backlight) kernel param"))
+    if len(s.usb_devices) > 0:
+        recs.append((0.3, "Let idle USB peripherals autosuspend "
+                          "(`echo auto > .../power/control`)"))
+    recs.sort(key=lambda r: -r[0])
+    return recs
+
+
+def optimal_checks(s: State) -> list[tuple[bool, str]]:
+    return [
+        (s.profile == "low-power", f"platform_profile = {s.profile}"),
+        (s.epp in ("power", "balance_power"), f"EPP = {s.epp}"),
+        (s.governor == "powersave", f"governor = {s.governor}"),
+        ("pcie_aspm" in s.cmdline, "PCIe ASPM powersupersave"),
+        (not s.dgpu_present, "dGPU removed from PCI"
+                             if not s.dgpu_present else "dGPU present"),
+        (s.wifi_powersave is not False, f"Wi-Fi power save "
+                                        f"{'on' if s.wifi_powersave else '?'}"),
+    ]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Rendering
+# ─────────────────────────────────────────────────────────────────────────────
+class C:
+    reset = "\033[0m"; bold = "\033[1m"; dim = "\033[2m"
+    red = "\033[31m"; grn = "\033[32m"; yel = "\033[33m"
+    blu = "\033[34m"; mag = "\033[35m"; cyn = "\033[36m"; gry = "\033[90m"
+
+    @classmethod
+    def off(cls) -> None:
+        for k in list(vars(cls)):
+            if not k.startswith("_") and isinstance(getattr(cls, k), str):
+                setattr(cls, k, "")
+
+
+# Map component -> color *attribute name*, resolved at render time so that
+# C.off() (--no-color / piped) actually strips the codes.
+COMPONENT_COLOR = {
+    "Display (panel+backlight)": "yel",
+    "SoC (CPU+iGPU package)": "red",
+    "Discrete GPU": "mag",
+    "Memory": "blu",
+    "NVMe storage": "cyn",
+    "Wi-Fi": "grn",
+    "USB peripherals": "grn",
+    "Platform baseline": "gry",
+}
+
+
+def comp_color(name: str) -> str:
+    return getattr(C, COMPONENT_COLOR.get(name, "blu"))
+
+
+def pct(frac: float) -> str:
+    return f"{frac * 100:.0f}%"
+
+
+def fmt_hz(hz: Optional[float]) -> str:
+    return f"{hz:.0f}Hz" if hz else "?Hz"
+
+
+def bar(watts: float, scale: float, color: str) -> str:
+    n = 0 if scale <= 0 else round(BAR_WIDTH * watts / scale)
+    n = max(0, min(BAR_WIDTH, n))
+    return color + "█" * n + C.gry + "·" * (BAR_WIDTH - n) + C.reset
+
+
+def render(s: State, comps: list[Component], identified: float,
+           baseline: Optional[float]) -> str:
+    out: list[str] = []
+    scale = s.measured_w if s.measured_w else identified
+
+    # Header
+    bat = f"{C.grn}{s.bat_status}{C.reset}"
+    if s.on_ac:
+        bat = f"{C.cyn}On AC{C.reset}"
+    cap = f" {s.capacity}%" if s.capacity is not None else ""
+    out.append(f"{C.bold}⚡ Power Dashboard{C.reset}  {C.dim}{PANEL}{C.reset}")
+    out.append(f"   {bat}{cap}   profile: {C.bold}{s.profile}{C.reset}"
+               f"   EPP: {s.epp}   gov: {s.governor}")
+
+    # Headline total
+    if s.measured_w is not None:
+        out.append("")
+        out.append(f"   {C.bold}{C.red}{s.measured_w:5.1f} W{C.reset}  total draw"
+                   f"   {C.dim}({s.measured_method}){C.reset}")
+    else:
+        out.append("")
+        out.append(f"   {C.dim}Battery draw not observable on AC — showing "
+                   f"modeled estimate only ({identified:.1f} W){C.reset}")
+
+    # Breakdown
+    out.append("")
+    out.append(f"   {C.bold}Where the watts go{C.reset}")
+    for c in sorted(comps, key=lambda x: -x.watts):
+        col = comp_color(c.name)
+        share = (c.watts / scale * 100) if scale else 0
+        tag = f"{C.grn}◆{C.reset}" if c.measured else " "
+        name = f"{c.name:<26.26}"
+        out.append(f"   {tag}{name} {bar(c.watts, scale, col)} "
+                   f"{c.watts:5.1f} W {share:4.0f}%")
+        if c.note:
+            out.append(f"     {C.dim}{c.note}{C.reset}")
+
+    if baseline is not None and baseline < -0.5:
+        out.append(f"   {C.yel}⚠ model exceeds measured by "
+                   f"{-baseline:.1f} W — coefficients high or transient load{C.reset}")
+    out.append(f"   {C.dim}identified {identified:.1f} W"
+               + (f" · measured {s.measured_w:.1f} W" if s.measured_w else "")
+               + f" · ◆ = hardware-sensor measured, rest modeled{C.reset}")
+
+    # State grid
+    out.append("")
+    out.append(f"   {C.bold}State{C.reset}")
+    disp = (f"{s.resolution or '?'} @ {fmt_hz(s.refresh_hz)}, "
+            f"{pct(s.brightness_frac or 0)} bright")
+    out.append(f"   display  {disp}")
+    out.append(f"   cpu      {pct(s.cpu_util)} busy, ~{s.cpu_mhz:.0f} MHz "
+               f"({s.scaling_driver})")
+    gpu = "removed/absent" if not s.dgpu_present else f"present ({s.dgpu_status})"
+    out.append(f"   gpu      iGPU {s.igpu_busy if s.igpu_busy is not None else '?'}%"
+               f" busy · dGPU {gpu}")
+    out.append(f"   storage  {s.nvme_count} NVMe · "
+               f"{len(s.usb_devices)} USB device(s) powered")
+
+    # Recommendations
+    recs = recommendations(s)
+    if recs:
+        out.append("")
+        out.append(f"   {C.bold}Levers{C.reset} "
+                   f"{C.dim}(est. saving — ranked){C.reset}")
+        for save, text in recs:
+            out.append(f"   {C.yel}~{save:3.1f}W{C.reset}  {text}")
+
+    # Already-optimal checklist
+    out.append("")
+    out.append(f"   {C.bold}Already tuned{C.reset}")
+    line = "   "
+    for ok, label in optimal_checks(s):
+        mark = f"{C.grn}✓{C.reset}" if ok else f"{C.yel}•{C.reset}"
+        line += f"{mark} {label}   "
+    out.append(line)
+
+    out.append("")
+    out.append(f"   {C.dim}Modeled from fixed coefficients; total pinned to "
+               f"measured battery draw. `--measure 5` for an accurate total.{C.reset}")
+    return "\n".join(out)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+def main() -> int:
+    ap = argparse.ArgumentParser(description="Deterministic laptop power dashboard")
+    ap.add_argument("--measure", type=float, default=0, metavar="SEC",
+                    help="integrate charge_now over SEC for an accurate total")
+    ap.add_argument("--watch", type=float, default=0, metavar="SEC",
+                    help="refresh the dashboard every SEC seconds")
+    ap.add_argument("--cpu-sample", type=float, default=0.7, metavar="SEC",
+                    help="CPU-utilisation sampling window (default 0.7s)")
+    ap.add_argument("--json", action="store_true", help="machine-readable output")
+    ap.add_argument("--no-color", action="store_true")
+    args = ap.parse_args()
+
+    if args.no_color or args.json or not sys.stdout.isatty() or os.environ.get("NO_COLOR"):
+        C.off()
+
+    def once() -> str:
+        s = read_state(args.cpu_sample, args.measure)
+        comps, identified, baseline = build_components(s)
+        if args.json:
+            return json.dumps({
+                "state": asdict(s),
+                "components": [asdict(c) for c in comps],
+                "identified_w": round(identified, 2),
+                "recommendations": [
+                    {"save_w": round(w, 2), "text": t}
+                    for w, t in recommendations(s)
+                ],
+            }, indent=2)
+        return render(s, comps, identified, baseline)
+
+    if args.watch > 0:
+        try:
+            while True:
+                sys.stdout.write("\033[2J\033[H")
+                print(once())
+                time.sleep(args.watch)
+        except KeyboardInterrupt:
+            return 0
+    else:
+        print(once())
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

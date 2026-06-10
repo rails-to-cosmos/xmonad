@@ -81,6 +81,7 @@ myManageHook =
         [ className =? "Gimp" --> doFloat
         , className =? "MPlayer" --> doFloat
         , className =? "web2org-term" --> customFloating (W.RationalRect 0.15 0.15 0.7 0.7)
+        , className =? "power-dash" --> customFloating (W.RationalRect 0.12 0.1 0.62 0.8)
         ]
         <+> namedScratchpadManageHook myScratchpads
 
@@ -114,6 +115,7 @@ myKeys =
     , ("M-S-g", spawn "~/.config/xmonad/scripts/dgpu-control.sh")
     , ("M-S-r", spawn "~/.config/xmonad/scripts/refresh-rate.sh")
     , ("M-S-p", spawn "~/.config/xmonad/scripts/power-profile.sh")
+    , ("M-S-w", spawn "alacritty --class power-dash -e ~/.config/xmonad/scripts/power-dashboard --watch 2")
     , ("M-o", spawn "~/.config/xmonad/scripts/web2org.sh")
     , ("M-S-o", spawn "WEB_CAPTURE_TERM=1 ~/.config/xmonad/scripts/web2org.sh")
     , ("M-<Escape>", spawn $ "echo -e 'Lock\nLogout\nSuspend\nReboot\nShutdown' | rofi -dmenu -p 'Power' " ++ rofiFlags ++ " | xargs -I{} sh -c 'case {} in Lock) loginctl lock-session;; Logout) xmonad --restart && killall xmonad;; Suspend) systemctl suspend;; Reboot) systemctl reboot;; Shutdown) systemctl poweroff;; esac'")
