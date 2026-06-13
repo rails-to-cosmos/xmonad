@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# YouTube handler: title/description/metadata via yt-dlp, transcript via
-# auto-subs when available, falling back to whisper if installed.
-# Downloads the video itself next to the org file:
+# Video handler (yt-dlp): title/description/metadata via yt-dlp, transcript
+# via auto-subs when available, falling back to whisper if installed.
+# Matches YouTube and Rutube video URLs — drop more yt-dlp-supported site
+# patterns into the match list below to extend it. Downloads the video
+# itself next to the org file:
 #   $WEB_CAPTURE_VIDEOS_DIR/{channel-slug}/{video-slug}.org
 #   $WEB_CAPTURE_VIDEOS_DIR/{channel-slug}/{video-slug}.mp4
 set -euo pipefail
@@ -13,6 +15,7 @@ case "${1:-}" in
 match)
     case "$2" in
         *youtube.com/watch*|*youtu.be/*|*youtube.com/shorts/*|*music.youtube.com/*) exit 0 ;;
+        *rutube.ru/video/*|*rutube.ru/play/embed/*|*rutube.ru/shorts/*) exit 0 ;;
     esac
     exit 1
     ;;
@@ -24,7 +27,7 @@ capture)
     tmpdir="$(mktemp -d)"
     trap 'rm -rf "$tmpdir"' EXIT
 
-    progress -p 10 "YouTube — fetching metadata"
+    progress -p 10 "Video — fetching metadata"
 
     meta="$tmpdir/meta.json"
     yt-dlp --skip-download --dump-json --no-warnings "$url" > "$meta" 2>/dev/null \
@@ -66,7 +69,7 @@ capture)
     sub_vtt="$(find "$tmpdir" -maxdepth 1 -name '*.vtt' | head -1)"
     if [[ -n "$sub_vtt" && -s "$sub_vtt" ]]; then
         subs_text="$(vtt_to_text "$sub_vtt")"
-        subs_source="youtube-auto"
+        subs_source="auto-subs"
     elif command -v whisper >/dev/null 2>&1; then
         # Prefer the already-downloaded video as the transcription source;
         # only fetch an audio-only stream if the video download failed.
