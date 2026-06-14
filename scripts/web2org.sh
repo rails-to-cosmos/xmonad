@@ -47,6 +47,19 @@ HANDLER_DIR="$SCRIPT_DIR/web2org.d"
 . "$HANDLER_DIR/config.sh"
 . "$HANDLER_DIR/lib.sh"
 
+# Job-status state for the xmobar `web2org` widget (read by xmobar-status):
+#   running/<pid> : one marker per in-flight capture (pid name → liveness check)
+#   success       : one line appended per successful capture
+#   failed        : one line appended per failed capture
+# Under $XDG_RUNTIME_DIR (tmpfs) so counters reset on logout/reboot.
+W2O_STATE="${XDG_RUNTIME_DIR:-/tmp}/web2org"
+W2O_MARKER="$W2O_STATE/running/$$"
+w2o_begin() { mkdir -p "$W2O_STATE/running"; : > "$W2O_MARKER"; }
+w2o_ok()    { rm -f "$W2O_MARKER"; printf 'ok\n'   >> "$W2O_STATE/success"; }
+w2o_fail()  { rm -f "$W2O_MARKER"; printf 'fail\n' >> "$W2O_STATE/failed"; }
+# Safety net: drop the marker even if a handler is killed mid-capture.
+trap 'rm -f "$W2O_MARKER" 2>/dev/null' EXIT
+
 # Tee everything to a timestamped log (+ stable "last" symlink) so a quiet
 # spawn from xmonad still leaves a full trace to inspect after a failure.
 LOG="/tmp/web2org-$(date +%Y%m%d-%H%M%S).log"
@@ -80,10 +93,13 @@ progress "Working… ($url)"
 for h in "$HANDLER_DIR"/[0-9][0-9]-*.sh; do
     [[ -x "$h" ]] || continue
     if "$h" match "$url" 2>/dev/null; then
+        w2o_begin
         if ! "$h" capture "$url"; then
+            w2o_fail
             notify -u critical "$(basename "$h") failed"
             exit 1
         fi
+        w2o_ok
         exit 0
     fi
 done

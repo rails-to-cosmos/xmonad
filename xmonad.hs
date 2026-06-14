@@ -1,8 +1,10 @@
 import Data.Bits ((.|.))
 import XMonad
-import XMonad.Hooks.DynamicLog
 import XMonad.Hooks.EwmhDesktops
 import XMonad.Hooks.ManageDocks
+import XMonad.Hooks.StatusBar
+import XMonad.Hooks.StatusBar.PP
+import XMonad.Hooks.Rescreen (addRandrChangeHook)
 import XMonad.Actions.CycleWS (prevWS, nextWS, shiftToPrev, shiftToNext)
 import XMonad.Layout.NoBorders (noBorders, smartBorders)
 import XMonad.Layout.Spacing
@@ -10,11 +12,7 @@ import XMonad.Layout.ToggleLayouts (ToggleLayout (..), toggleLayouts)
 import XMonad.Util.EZConfig (additionalKeysP)
 import qualified XMonad.StackSet as W
 import XMonad.Util.NamedScratchpad
-import XMonad.Util.Run (spawnPipe)
-import XMonad.Layout.IndependentScreens (countScreens)
 import XMonad.Util.SpawnOnce
-
-import System.IO (hPutStrLn)
 
 myTerminal :: String
 myTerminal = "alacritty"
@@ -56,7 +54,11 @@ myStartupHook = do
     spawn "~/.config/xmonad/scripts/caps-off.sh"
     -- spawn "~/.config/xmonad/scripts/kmonad-start.sh"
     spawn "~/.config/xmonad/scripts/audio-fix.sh"
-    spawn "FORCE_REBUILD=1 ~/.config/xmonad/scripts/build-xmobar-status.sh && notify-send -i dialog-information 'xmobar-status' 'Rebuilt successfully' || notify-send -u critical -i dialog-error 'xmobar-status' 'Build failed'"
+    -- Rebuild the status binary, then bounce the daemon child so the supervisor
+    -- respawns it with the fresh binary (the supervisor itself holds the FIFO
+    -- open, so this bounce doesn't blank the bar), then ensure the supervisor
+    -- is running. Sequenced in one spawn so order is deterministic.
+    spawn "FORCE_REBUILD=1 ~/.config/xmonad/scripts/build-xmobar-status.sh && notify-send -i dialog-information 'xmobar-status' 'Rebuilt successfully' || notify-send -u critical -i dialog-error 'xmobar-status' 'Build failed'; pkill -f '[x]mobar-status daemon' 2>/dev/null; ~/.config/xmonad/scripts/xmobar-statusd-run.sh &"
     -- spawn "sudo -n ~/.config/xmonad/scripts/power-tweaks.sh"
     spawnOnce "dunst"
     spawnOnce "/usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1"
@@ -121,36 +123,44 @@ myKeys =
     , ("M-<Escape>", spawn $ "echo -e 'Lock\nLogout\nSuspend\nReboot\nShutdown' | rofi -dmenu -p 'Power' " ++ rofiFlags ++ " | xargs -I{} sh -c 'case {} in Lock) loginctl lock-session;; Logout) xmonad --restart && killall xmonad;; Suspend) systemctl suspend;; Reboot) systemctl reboot;; Shutdown) systemctl poweroff;; esac'")
     ]
 
+-- Workspace/title pretty-printer piped to each bar's StdinReader.
+myPP :: PP
+myPP = xmobarPP
+    { ppLayout = const ""
+    , ppTitle = xmobarColor myAccentColor "" . shorten 50
+    , ppCurrent = xmobarColor myAccentColor "" . wrap "[" "]"
+    , ppHidden = xmobarColor "#C0C5CF" ""
+    , ppHiddenNoWindows = xmobarColor "#39393D" ""
+    , ppSep = "  |  "
+    }
+
+-- One xmobar per screen, spawned/killed automatically by dynamicSBs as screens
+-- come and go (e.g. plugging/unplugging a monitor). ScreenId is Integral, so
+-- fromIntegral gives the -x index.
+mkBar :: ScreenId -> X StatusBarConfig
+mkBar sid = io $ statusBarPipe
+    ("xmobar -x " ++ show (fromIntegral sid :: Int) ++ " ~/.config/xmobar/xmobarrc")
+    (pure myPP)
+
 main :: IO ()
-main = do
-    nScreens <- countScreens
-    xmprocs  <- mapM
-        (\sid -> spawnPipe ("xmobar -x " ++ show (sid :: Int) ++ " ~/.config/xmobar/xmobarrc"))
-        [0 .. nScreens - 1]
-    xmonad $
-        ewmhFullscreen $
-            ewmh $
-                docks
-                    def
-                        { terminal = myTerminal
-                        , modMask = myModMask
-                        , borderWidth = myBorderWidth
-                        , normalBorderColor = myNormalBorderColor
-                        , focusedBorderColor = myFocusedBorderColor
-                        , workspaces = myWorkspaces
-                        , layoutHook = myLayout
-                        , manageHook = myManageHook <+> manageHook def
-                        , startupHook = myStartupHook
-                        , logHook =
-                            dynamicLogWithPP
-                                xmobarPP
-                                    { ppOutput = \msg -> mapM_ (`hPutStrLn` msg) xmprocs
-                                    , ppLayout = const ""
-                                    , ppTitle = xmobarColor myAccentColor "" . shorten 50
-                                    , ppCurrent = xmobarColor myAccentColor "" . wrap "[" "]"
-                                    , ppHidden = xmobarColor "#C0C5CF" ""
-                                    , ppHiddenNoWindows = xmobarColor "#39393D" ""
-                                    , ppSep = "  |  "
-                                    }
-                        }
-                    `additionalKeysP` myKeys
+main = xmonad
+     $ ewmhFullscreen
+     $ ewmh
+     $ docks
+     -- dynamicSBs manages per-screen bars across screen changes; addRandrChangeHook
+     -- runs `xrandr --auto` on monitor hotplug so a disconnected output's CRTC is
+     -- dropped (otherwise Xinerama/countScreens stay stale and a phantom bar lingers).
+     $ dynamicSBs mkBar
+     $ addRandrChangeHook (spawn "xrandr --auto")
+     $ def
+         { terminal = myTerminal
+         , modMask = myModMask
+         , borderWidth = myBorderWidth
+         , normalBorderColor = myNormalBorderColor
+         , focusedBorderColor = myFocusedBorderColor
+         , workspaces = myWorkspaces
+         , layoutHook = myLayout
+         , manageHook = myManageHook <+> manageHook def
+         , startupHook = myStartupHook
+         }
+     `additionalKeysP` myKeys
