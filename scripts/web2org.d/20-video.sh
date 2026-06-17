@@ -2,17 +2,19 @@
 # Video handler (yt-dlp): title/description/metadata via yt-dlp, transcript
 # via auto-subs when available, falling back to whisper if installed.
 # Matches YouTube and Rutube video URLs — drop more yt-dlp-supported site
-# patterns into the match list below to extend it. Downloads the video
-# itself next to the org file:
-#   $WEB_CAPTURE_VIDEOS_DIR/{channel-slug}/{video-slug}.org
-#   $WEB_CAPTURE_VIDEOS_DIR/{channel-slug}/{video-slug}.mp4
+# patterns into the match list below to extend it. Downloads the video itself
+# next to the org file:
+#   $WEB_CAPTURE_VIDEOS_DIR/{channel-slug}/{video-slug}.{org,mp4}                 (single video)
+#   $WEB_CAPTURE_VIDEOS_DIR/{channel-slug}/{playlist-slug}/{video-slug}.{org,mp4} (playlist entry)
 #
 # Playlists: a YouTube *playlist page* (`…/playlist?list=…`, or a `watch?…`
 # URL carrying `list=` but NO `v=`) is enumerated and every not-yet-downloaded
-# entry is captured. A `watch?v=…&list=…` link is treated as a single video
-# (you navigated to a specific one), so only that video is captured. Whether an
-# entry is "already downloaded" is derived purely from the files on disk (video
-# ids found in existing org files) — no separate ledger to drift out of sync.
+# entry is captured into {playlist-owner-channel}/{playlist} (both transliterated),
+# so the whole playlist lands in one place under its channel. A `watch?v=…&list=…`
+# link is treated as a single video (you navigated to one), so only it is captured.
+# Whether an entry is "already downloaded" is derived purely from the files on
+# disk (video ids found in existing org files, scanned across the whole tree) —
+# no separate ledger to drift out of sync.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/config.sh"
@@ -101,8 +103,10 @@ capture_one() {
     channel_slug="$(slugify "$channel")"
     [[ -z "$channel_slug" ]] && channel_slug="unknown-channel"
 
+    # Playlist captures pass CO_OUTDIR to group the whole playlist under one
+    # (transliterated) directory; single captures fall back to per-channel.
     local outdir out video_file
-    outdir="$WEB_CAPTURE_VIDEOS_DIR/$channel_slug"
+    outdir="${CO_OUTDIR:-$WEB_CAPTURE_VIDEOS_DIR/$channel_slug}"
     mkdir -p "$outdir" || { co_notify -u critical "mkdir failed: $outdir"; rm -rf "$tmpdir"; tmpdir=""; return 1; }
     out="$outdir/${slug}.org"
     video_file="$outdir/${slug}.mp4"
@@ -211,6 +215,20 @@ capture_playlist() {
     fi
     local pl_title; pl_title="$(jq -r '.title // empty' "$pljson")"
     [ -n "$pl_title" ] || pl_title="$plid"
+    # All of this playlist's videos go under {channel}/{playlist} (both
+    # transliterated) via CO_OUTDIR below — e.g.
+    #   videos/lektoriy-fpmi/programmirovanie-na-yazyke-c/
+    # The channel is the PLAYLIST owner's (so a curated playlist spanning many
+    # creators still lands in one place); it's null for some user playlists,
+    # hence the unknown-channel fallback (matching capture_one). Per-video
+    # #+CHANNEL: metadata still records each video's true channel. Dedup scans
+    # the whole tree, so a video already grabbed elsewhere is not re-downloaded.
+    local pl_channel; pl_channel="$(jq -r '.channel // .uploader // empty' "$pljson")"
+    local pl_channel_slug; pl_channel_slug="$(slugify "$pl_channel")"
+    [ -n "$pl_channel_slug" ] || pl_channel_slug="unknown-channel"
+    local pl_slug; pl_slug="$(slugify "$pl_title")"
+    [ -n "$pl_slug" ] || pl_slug="playlist-$plid"
+    local pl_outdir="$WEB_CAPTURE_VIDEOS_DIR/$pl_channel_slug/$pl_slug"
 
     # Already-downloaded ids (filesystem-derived).
     local -A have=()
@@ -284,7 +302,7 @@ capture_playlist() {
         # active + queue=this sums to the real remaining count).
         printf '%s\n' "$((n - idx))" > "$w2o_queue" 2>/dev/null || true
         progress -p "$pct" "[$idx/$n] ${vtitle:0:60}"
-        if CO_QUIET=1 capture_one "https://www.youtube.com/watch?v=$vid"; then
+        if CO_QUIET=1 CO_OUTDIR="$pl_outdir" capture_one "https://www.youtube.com/watch?v=$vid"; then
             ok=$((ok + 1))
         else
             fail=$((fail + 1)); failed_titles+=("${vtitle:-$vid}")
