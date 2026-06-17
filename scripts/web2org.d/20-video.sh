@@ -7,11 +7,12 @@
 #   $WEB_CAPTURE_VIDEOS_DIR/{channel-slug}/{video-slug}.{org,mp4}                 (single video)
 #   $WEB_CAPTURE_VIDEOS_DIR/{channel-slug}/{playlist-slug}/{video-slug}.{org,mp4} (playlist entry)
 #
-# Playlists: a YouTube *playlist page* (`…/playlist?list=…`, or a `watch?…`
-# URL carrying `list=` but NO `v=`) is enumerated and every not-yet-downloaded
-# entry is captured into {playlist-owner-channel}/{playlist} (both transliterated),
-# so the whole playlist lands in one place under its channel. A `watch?v=…&list=…`
-# link is treated as a single video (you navigated to one), so only it is captured.
+# Playlists: a playlist page — Rutube `rutube.ru/plst/<id>/`, or a YouTube
+# `…/playlist?list=…` (or a `watch?…` URL carrying `list=` but NO `v=`) — is
+# enumerated and every not-yet-downloaded entry is captured into
+# {channel}/{playlist} (both transliterated), so the whole playlist lands in one
+# place under its channel. A YouTube `watch?v=…&list=…` link is treated as a
+# single video (you navigated to one), so only it is captured.
 # Whether an entry is "already downloaded" is derived purely from the files on
 # disk (video ids found in existing org files, scanned across the whole tree) —
 # no separate ledger to drift out of sync.
@@ -28,13 +29,18 @@ w2o_queue=""   # playlist queue-depth marker for the xmobar web2org widget
 trap 'rm -rf "${tmpdir:-}" 2>/dev/null; rm -f "${pljson:-}" "${w2o_queue:-}" 2>/dev/null' EXIT
 
 # --- playlist detection -----------------------------------------------------
-# Echo the playlist id and succeed IFF the URL is a *playlist page*: a YouTube
-# URL with a real `list=` id and NO specific video selected (`v=`). youtu.be /
-# /shorts/ / /embed/ links always denote a single video, so they never match.
-# Autoplay Mixes/Radio (RD…/UL…) are excluded — they are effectively infinite.
+# Echo the playlist id and succeed IFF the URL is a *playlist page*:
+#   - Rutube:  rutube.ru/plst/<id>/
+#   - YouTube: a `list=` id with NO specific video selected (`v=`). youtu.be /
+#     /shorts/ / /embed/ always denote a single video; Mixes/Radio (RD…/UL…)
+#     are excluded (effectively infinite).
 playlist_id_of() {
     local u="$1" id
     case "$u" in
+        *rutube.ru/plst/*)
+            id="$(printf '%s' "$u" | sed -n 's#.*/plst/\([0-9][0-9]*\).*#\1#p')"
+            [ -n "$id" ] || return 1
+            printf '%s' "$id"; return 0 ;;
         *youtube.com/playlist[?]*|*music.youtube.com/playlist[?]*) : ;;
         *youtube.com/watch[?]*|*music.youtube.com/watch[?]*)
             case "$u" in *[?\&]v=[A-Za-z0-9_-]*) return 1 ;; esac ;;
@@ -199,6 +205,20 @@ confirm_large_playlist() {
     return 0
 }
 
+# Best-effort playlist title for sites where yt-dlp exposes none (Rutube): scrape
+# the page <title> and strip the Rutube "<name> – смотреть плейлист, …" suffix.
+# Echoes a usable title, or nothing (caller falls back to playlist-<id>).
+scrape_playlist_title() {
+    local url="$1" html title name
+    command -v curl >/dev/null 2>&1 || return 0
+    html="$(curl -fsSL -A 'Mozilla/5.0' --max-time 10 "$url" 2>/dev/null)" || return 0
+    title="$(printf '%s' "$html" | grep -oiP '(?<=<title>).*?(?=</title>)' | head -1 | tr -d '\n')"
+    [ -n "$title" ] || return 0
+    name="${title%%смотреть плейлист*}"
+    [ "$name" != "$title" ] || return 0      # marker absent → don't trust the <title>
+    printf '%s' "${name% – }"                # drop the trailing " – " separator
+}
+
 # capture_playlist URL PLAYLIST_ID — enumerate the playlist and capture every
 # entry not already on disk. Per-video failures are non-fatal; returns non-zero
 # only if there was work to do and nothing succeeded.
@@ -213,17 +233,21 @@ capture_playlist() {
         notify -u critical "yt-dlp failed to read playlist $url"
         rm -f "$pljson"; pljson=""; return 1
     fi
+    # Playlist title: yt-dlp's top-level .title (YouTube) → scrape the page
+    # <title> (Rutube exposes no playlist title) → playlist-<id>.
     local pl_title; pl_title="$(jq -r '.title // empty' "$pljson")"
-    [ -n "$pl_title" ] || pl_title="$plid"
+    [ -n "$pl_title" ] || pl_title="$(scrape_playlist_title "$url")"
+    [ -n "$pl_title" ] || pl_title="playlist-$plid"
     # All of this playlist's videos go under {channel}/{playlist} (both
     # transliterated) via CO_OUTDIR below — e.g.
-    #   videos/lektoriy-fpmi/programmirovanie-na-yazyke-c/
-    # The channel is the PLAYLIST owner's (so a curated playlist spanning many
-    # creators still lands in one place); it's null for some user playlists,
-    # hence the unknown-channel fallback (matching capture_one). Per-video
-    # #+CHANNEL: metadata still records each video's true channel. Dedup scans
-    # the whole tree, so a video already grabbed elsewhere is not re-downloaded.
-    local pl_channel; pl_channel="$(jq -r '.channel // .uploader // empty' "$pljson")"
+    #   videos/c-lekcii-na-russkom-yazyke/c-bazovyy-kurs-mipt/
+    # Channel = the first channel/uploader found at the playlist level (YouTube
+    # populates it there) OR on any entry (Rutube populates it per entry, not at
+    # the playlist level); unknown-channel if none (matching capture_one). A
+    # curated playlist spanning creators still lands in one place. Per-video
+    # #+CHANNEL: still records each video's true channel. Dedup scans the whole
+    # tree, so a video already grabbed elsewhere is not re-downloaded.
+    local pl_channel; pl_channel="$(jq -r '[.channel, .uploader, (.entries[]?.channel), (.entries[]?.uploader)] | map(select(. != null and . != "")) | .[0] // empty' "$pljson")"
     local pl_channel_slug; pl_channel_slug="$(slugify "$pl_channel")"
     [ -n "$pl_channel_slug" ] || pl_channel_slug="unknown-channel"
     local pl_slug; pl_slug="$(slugify "$pl_title")"
@@ -241,12 +265,12 @@ capture_playlist() {
     # and fail capture forever (their per-video metadata fetch errors out). This
     # also drops currently-live/upcoming streams (duration null), which we can't
     # archive anyway and which would otherwise stall the serial loop indefinitely.
-    local -a ids=() titles=()
-    local ttl
-    while IFS=$'\t' read -r id ttl; do
+    local -a ids=() urls=() titles=()
+    local eurl ttl
+    while IFS=$'\t' read -r id eurl ttl; do
         [ -n "$id" ] || continue
-        ids+=("$id"); titles+=("$ttl")
-    done < <(jq -r '.entries[]? | select(type=="object" and .id != null and .duration != null) | [.id, (.title // "")] | @tsv' "$pljson")
+        ids+=("$id"); urls+=("$eurl"); titles+=("$ttl")
+    done < <(jq -r '.entries[]? | select(type=="object" and .id != null and .duration != null and (.url // "") != "") | [.id, .url, (.title // "")] | @tsv' "$pljson")
     rm -f "$pljson"; pljson=""
 
     local total=${#ids[@]}
@@ -256,11 +280,11 @@ capture_playlist() {
     fi
 
     # Which entries are new?
-    local -a new_ids=() new_titles=()
+    local -a new_ids=() new_urls=() new_titles=()
     local i
     for ((i = 0; i < total; i++)); do
         [ -n "${have[${ids[i]}]:-}" ] && continue
-        new_ids+=("${ids[i]}"); new_titles+=("${titles[i]}")
+        new_ids+=("${ids[i]}"); new_urls+=("${urls[i]}"); new_titles+=("${titles[i]}")
     done
     local n=${#new_ids[@]}
 
@@ -292,17 +316,17 @@ capture_playlist() {
     # Capture each new video. CO_QUIET silences capture_one's own progress/notify
     # so the [i/n] counter below stays the live message and per-video failures
     # don't each spawn a persistent critical bubble — they're coalesced below.
-    local ok=0 fail=0 idx pct vid vtitle
+    local ok=0 fail=0 idx pct vid vurl vtitle
     local -a failed_titles=()
     for ((i = 0; i < n; i++)); do
         idx=$((i + 1))
-        vid="${new_ids[i]}"; vtitle="${new_titles[i]}"
+        vid="${new_ids[i]}"; vurl="${new_urls[i]}"; vtitle="${new_titles[i]}"
         pct=$(( 5 + (idx * 90) / n ))
         # Videos still waiting after the one we're about to start (so spinner=1
         # active + queue=this sums to the real remaining count).
         printf '%s\n' "$((n - idx))" > "$w2o_queue" 2>/dev/null || true
         progress -p "$pct" "[$idx/$n] ${vtitle:0:60}"
-        if CO_QUIET=1 CO_OUTDIR="$pl_outdir" capture_one "https://www.youtube.com/watch?v=$vid"; then
+        if CO_QUIET=1 CO_OUTDIR="$pl_outdir" capture_one "$vurl"; then
             ok=$((ok + 1))
         else
             fail=$((fail + 1)); failed_titles+=("${vtitle:-$vid}")
@@ -328,7 +352,7 @@ case "${1:-}" in
 match)
     case "$2" in
         *youtube.com/watch*|*youtu.be/*|*youtube.com/shorts/*|*youtube.com/playlist*|*music.youtube.com/*) exit 0 ;;
-        *rutube.ru/video/*|*rutube.ru/play/embed/*|*rutube.ru/shorts/*) exit 0 ;;
+        *rutube.ru/video/*|*rutube.ru/play/embed/*|*rutube.ru/shorts/*|*rutube.ru/plst/*) exit 0 ;;
     esac
     exit 1
     ;;
