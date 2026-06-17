@@ -52,7 +52,9 @@ HANDLER_DIR="$SCRIPT_DIR/web2org.d"
 #   success       : one line appended per successful capture
 #   failed        : one line appended per failed capture
 # Under $XDG_RUNTIME_DIR (tmpfs) so counters reset on logout/reboot.
-W2O_STATE="${XDG_RUNTIME_DIR:-/tmp}/web2org"
+# Exported so handlers (e.g. 20-video.sh's playlist loop) write into the SAME
+# state dir the dispatcher and the xmobar daemon read (queue-depth markers).
+export W2O_STATE="${XDG_RUNTIME_DIR:-/tmp}/web2org"
 W2O_MARKER="$W2O_STATE/running/$$"
 w2o_begin() { mkdir -p "$W2O_STATE/running"; : > "$W2O_MARKER"; }
 w2o_ok()    { rm -f "$W2O_MARKER"; printf 'ok\n'   >> "$W2O_STATE/success"; }

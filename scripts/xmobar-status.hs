@@ -729,8 +729,10 @@ statusdHealth t = do
                 _        -> False
   return $ icon (if fresh then tGood t else tErr t) heart
 
--- web2org capture activity. web2org.sh maintains a state dir:
---   running/<pid>  : one marker file per in-flight capture
+-- web2org capture activity. web2org.sh / the video handler maintain a state dir:
+--   running/<pid>  : one marker file per in-flight capture invocation
+--   queue/<pid>    : # of playlist entries still enqueued behind <pid>'s current
+--                    video (written by 20-video.sh's playlist loop)
 --   success        : one line appended per successful capture
 --   failed         : one line appended per failed capture
 -- (under $XDG_RUNTIME_DIR/web2org, tmpfs → resets on logout/reboot.)
@@ -738,8 +740,9 @@ web2orgWidget :: Theme -> IO String
 web2orgWidget t = do
   dir <- w2oDir
   ip <- countRunning (dir </> "running")
-  ok <- countLines (dir </> "success")
-  fl <- countLines (dir </> "failed")
+  qd <- sumQueue     (dir </> "queue")
+  ok <- countLines   (dir </> "success")
+  fl <- countLines   (dir </> "failed")
   let dl = "\xF0ED"  -- nf-fa-cloud_download
       baseColor | ip > 0    = tAccent t
                 | fl > 0    = tErr t
@@ -747,6 +750,7 @@ web2orgWidget t = do
                 | otherwise = tDim t
       parts = catMaybes
         [ if ip > 0 then Just (fc (tAccent t) (fn1 "\xF021" ++ " " ++ show ip)) else Nothing  -- nf-fa-refresh
+        , if qd > 0 then Just (fc (tAccent t) (fn1 "\xF017" ++ " " ++ show qd)) else Nothing  -- nf-fa-clock_o (enqueued)
         , if ok > 0 then Just (fc (tGood t)   (fn1 "\xF00C" ++ " " ++ show ok)) else Nothing  -- nf-fa-check
         , if fl > 0 then Just (fc (tErr t)    (fn1 "\xF00D" ++ " " ++ show fl)) else Nothing  -- nf-fa-times
         ]
@@ -770,6 +774,23 @@ web2orgWidget t = do
         return ()
       return live
     countLines f = length . filter (== '\n') <$> readFileSafe f
+    -- queue/<pid> holds how many playlist entries are still enqueued behind the
+    -- video that pid is currently capturing; sum across live pids (sweeping the
+    -- dead like countRunning) so the bar shows total pending work.
+    sumQueue d = do
+      ex <- doesDirectoryExist d
+      if not ex then return 0
+      else do
+        entries <- listDirectory d
+        sum <$> mapM (queueOf d) entries
+    queueOf d pid = do
+      live <- doesDirectoryExist ("/proc" </> pid)
+      if not live
+        then (try (removeFile (d </> pid)) :: IO (Either SomeException ())) >> return 0
+        else parseCount <$> readFileSafe (d </> pid)
+    parseCount s = case reads (takeWhile (/= '\n') s) :: [(Int, String)] of
+                     [(x, _)] -> max 0 x
+                     _        -> 0
 
 -- Assemble the whole right-hand bar segment, reproducing the original
 -- template's literal separators/icons (vol=U+F028, cpu=U+F2DB, mem=U+F1C0,
